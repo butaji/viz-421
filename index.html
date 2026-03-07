@@ -4,155 +4,244 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Particle Audio Terrain</title>
+    <title>Dot Road Audio Visualizer</title>
     <style>
+        :root {
+            color-scheme: dark;
+            background: #01030a;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         html,
         body {
-            margin: 0;
+            width: 100%;
             height: 100%;
+            margin: 0;
             overflow: hidden;
-            background: #000;
+            background: #01030a;
+        }
+
+        body {
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
         }
 
         canvas {
             display: block;
             width: 100%;
             height: 100%;
-            background: #000;
+            background: radial-gradient(circle at 50% 18%, #11284f 0%, #050a16 28%, #01030a 68%);
+        }
+
+        #ui {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 24px;
+            padding: 22px;
+            pointer-events: none;
+            z-index: 2;
+            opacity: 1;
+            transition: opacity 500ms ease;
+        }
+
+        #ui.hidden {
+            opacity: 0;
+        }
+
+        #ui.hidden .panel {
+            pointer-events: none;
+        }
+
+        .panel {
+            pointer-events: auto;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 28px;
+            background: rgba(2, 6, 22, 0.74);
+            box-shadow: inset 0 0 0 1px rgba(94, 170, 255, 0.04), 0 24px 70px rgba(0, 0, 0, 0.42);
+            backdrop-filter: blur(16px) saturate(145%);
+        }
+
+        .hero {
+            max-width: min(620px, calc(100vw - 44px));
+            padding: 22px;
+        }
+
+        .eyebrow {
+            display: inline-block;
+            margin-bottom: 10px;
+            color: #53f6ff;
+            font-size: 12px;
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        h1 {
+            margin: 0 0 14px;
+            color: #f7f8ff;
+            font-size: clamp(44px, 7vw, 82px);
+            line-height: 0.9;
+            letter-spacing: -0.06em;
+            max-width: 10ch;
+        }
+
+        p {
+            margin: 0;
+            max-width: 30ch;
+            color: rgba(245, 246, 251, 0.76);
+            font-size: 15px;
+            line-height: 1.45;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 22px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            appearance: none;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+            color: #eef2ff;
+            font: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            padding: 15px 22px;
             cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+
+        .stats {
+            min-width: 270px;
+            padding: 18px 22px;
+            display: grid;
+            gap: 18px;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            color: rgba(245, 246, 251, 0.62);
+            font-size: 12px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .stat strong {
+            color: #f7f8ff;
+            font-size: 14px;
+            letter-spacing: 0.14em;
+        }
+
+        @media (max-width: 860px) {
+            #ui {
+                flex-direction: column;
+            }
+
+            .stats {
+                min-width: 0;
+                width: min(100%, 360px);
+            }
         }
     </style>
 </head>
 
 <body>
-    <canvas id="c"></canvas>
+    <div id="ui">
+        <div class="panel hero">
+            <span class="eyebrow">Cosmic Audio Reactor</span>
+            <h1>Dot road spectrum</h1>
+            <p id="msg">Start the microphone to capture the live horizon spectrum and send each one-second snapshot down the rainbow road.</p>
+            <div class="controls">
+                <button id="toggle-audio">Start mic</button>
+                <button id="fullscreen">Fullscreen</button>
+            </div>
+        </div>
+        <div class="panel stats">
+            <div class="stat"><span>Energy</span><strong id="energy">0.00</strong></div>
+            <div class="stat"><span>Punch</span><strong id="punch">0.00</strong></div>
+            <div class="stat"><span>Peak</span><strong id="peak">0 Hz</strong></div>
+            <div class="stat"><span>Mode</span><strong id="mode">Wake</strong></div>
+        </div>
+    </div>
+    <canvas id="scene"></canvas>
 
     <script>
         (() => {
-            const canvas = document.getElementById('c');
-            const gl = canvas.getContext('webgl', {
-                alpha: false,
-                antialias: true,
-                depth: false,
-                stencil: false,
-                premultipliedAlpha: false
-            });
+            const canvas = document.getElementById('scene');
+            const ctx = canvas.getContext('2d');
+            const ui = document.getElementById('ui');
+            const toggleAudioBtn = document.getElementById('toggle-audio');
+            const fullscreenBtn = document.getElementById('fullscreen');
+            const msg = document.getElementById('msg');
+            const energyEl = document.getElementById('energy');
+            const punchEl = document.getElementById('punch');
+            const peakEl = document.getElementById('peak');
+            const modeEl = document.getElementById('mode');
 
-            if (!gl) return;
+            const CONFIG = {
+                fftSize: 1024,
+                spectrumSize: 120,
+                laneCount: 120,
+                rowCount: 22,
+                horizonY: 0.58,
+                horizonWidth: 1.0,
+                nearWidth: 1.18,
+                bottomOverscan: 0.12,
+                sampleMs: 120,
+                travelMs: 12000,
+                dotRadius: 1.15,
+                horizonLift: 276,
+                starCount: 180,
+                scanlineAlpha: 0.028
+            };
 
-            const TERRAIN_COLS = 320;
-            const TERRAIN_ROWS = 180;
-            const TERRAIN_COUNT = TERRAIN_COLS * TERRAIN_ROWS;
-            const TRAIL_COLS = 320;
-            const TRAIL_SEGMENTS = 14;
-            const TRAIL_COUNT = TRAIL_COLS * TRAIL_SEGMENTS;
-
-            const terrainPositions = new Float32Array(TERRAIN_COUNT * 3);
-            const terrainColors = new Float32Array(TERRAIN_COUNT * 3);
-            const terrainSizes = new Float32Array(TERRAIN_COUNT);
-            const terrainU = new Float32Array(TERRAIN_COUNT);
-            const terrainV = new Float32Array(TERRAIN_COUNT);
-
-            const trailPositions = new Float32Array(TRAIL_COUNT * 3);
-            const trailColors = new Float32Array(TRAIL_COUNT * 3);
-            const trailSizes = new Float32Array(TRAIL_COUNT);
-
-            const spectrum = new Float32Array(TERRAIN_COLS);
-            let columnBins = new Uint16Array(TERRAIN_COLS);
-            let analyser, ac, stream, freq;
-            let started = false;
-            let dominantHz = 0;
-
-            const gradientStops = [
-                [0.00, [18, 160, 255]],
-                [0.18, [52, 240, 255]],
-                [0.34, [82, 255, 180]],
-                [0.55, [255, 222, 84]],
-                [0.72, [255, 138, 52]],
-                [0.86, [255, 64, 184]],
-                [1.00, [140, 74, 255]]
+            const PALETTE = [
+                [0.14, 0.45, 1.0],
+                [0.00, 0.95, 1.0],
+                [0.12, 0.98, 0.78],
+                [0.98, 0.98, 0.26],
+                [1.00, 0.48, 0.18],
+                [1.00, 0.18, 0.72]
             ];
 
-            const vertexSrc = `
-                attribute vec3 aPosition;
-                attribute vec3 aColor;
-                attribute float aSize;
+            const smoothed = new Float32Array(CONFIG.spectrumSize);
+            const stars = [];
+            const rows = [];
 
-                uniform float uAspect;
-                uniform float uPointScale;
-
-                varying vec3 vColor;
-                varying float vAlpha;
-                varying float vDepth;
-
-                void main() {
-                    vec3 p = aPosition;
-                    float pitch = -0.92;
-                    float cp = cos(pitch);
-                    float sp = sin(pitch);
-
-                    vec3 r;
-                    r.x = p.x;
-                    r.y = p.y * cp - p.z * sp;
-                    r.z = p.y * sp + p.z * cp + 8.0;
-
-                    float perspective = 1.55 / max(r.z, 0.1);
-                    gl_Position = vec4(r.x * perspective / uAspect, r.y * perspective, 0.0, 1.0);
-                    gl_PointSize = max(1.0, aSize * perspective * uPointScale);
-
-                    vColor = aColor;
-                    vAlpha = clamp(perspective * 2.1, 0.0, 1.0);
-                    vDepth = clamp(1.0 - r.z * 0.04, 0.0, 1.0);
-                }
-            `;
-
-            const fragmentSrc = `
-                precision mediump float;
-
-                varying vec3 vColor;
-                varying float vAlpha;
-                varying float vDepth;
-
-                void main() {
-                    vec2 uv = gl_PointCoord * 2.0 - 1.0;
-                    float d = dot(uv, uv);
-                    if (d > 1.0) discard;
-
-                    float core = smoothstep(0.32, 0.0, d);
-                    float glow = exp(-d * 3.8);
-                    float fog = mix(0.55, 1.0, vDepth);
-                    vec3 color = vColor * (0.22 * glow + 0.92 * core) * fog;
-                    float alpha = (0.18 * glow + 0.95 * core) * vAlpha * fog;
-
-                    gl_FragColor = vec4(color, alpha);
-                }
-            `;
-
-            function compile(type, source) {
-                const shader = gl.createShader(type);
-                gl.shaderSource(shader, source);
-                gl.compileShader(shader);
-                return shader;
-            }
-
-            const program = gl.createProgram();
-            gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexSrc));
-            gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSrc));
-            gl.linkProgram(program);
-            gl.useProgram(program);
-
-            const locPosition = gl.getAttribLocation(program, 'aPosition');
-            const locColor = gl.getAttribLocation(program, 'aColor');
-            const locSize = gl.getAttribLocation(program, 'aSize');
-            const locAspect = gl.getUniformLocation(program, 'uAspect');
-            const locPointScale = gl.getUniformLocation(program, 'uPointScale');
-
-            const terrainPosBuffer = gl.createBuffer();
-            const terrainColorBuffer = gl.createBuffer();
-            const terrainSizeBuffer = gl.createBuffer();
-            const trailPosBuffer = gl.createBuffer();
-            const trailColorBuffer = gl.createBuffer();
-            const trailSizeBuffer = gl.createBuffer();
+            let width = 0;
+            let height = 0;
+            let dpr = 1;
+            let horizonY = 0;
+            let audioContext = null;
+            let analyser = null;
+            let stream = null;
+            let freqData = null;
+            let bandMap = new Uint16Array(0);
+            let lastFrame = 0;
+            let sampleClock = 0;
+            let overlayTimer = 0;
+            let hoverTimer = 0;
+            let energy = 0;
+            let punch = 0;
+            let bass = 0;
+            let dominantHz = 0;
 
             function clamp(v, lo, hi) {
                 return Math.max(lo, Math.min(hi, v));
@@ -162,248 +251,365 @@
                 return a + (b - a) * t;
             }
 
-            function paletteColor(t) {
-                const x = clamp(t, 0, 1);
-                for (let i = 0; i < gradientStops.length - 1; i++) {
-                    const a = gradientStops[i];
-                    const b = gradientStops[i + 1];
-                    if (x <= b[0]) {
-                        const f = (x - a[0]) / (b[0] - a[0]);
-                        return [
-                            mix(a[1][0], b[1][0], f) / 255,
-                            mix(a[1][1], b[1][1], f) / 255,
-                            mix(a[1][2], b[1][2], f) / 255
-                        ];
-                    }
-                }
-                const last = gradientStops[gradientStops.length - 1][1];
-                return [last[0] / 255, last[1] / 255, last[2] / 255];
+            function smoothstep(a, b, x) {
+                const t = clamp((x - a) / (b - a), 0, 1);
+                return t * t * (3 - 2 * t);
             }
 
-            function logIndex(i, n, minHz, maxHz, sampleRate) {
-                const nyquist = sampleRate / 2;
-                const lo = Math.max(20, minHz);
-                const hi = Math.min(nyquist, maxHz);
-                const frac = i / Math.max(1, n - 1);
-                const hz = lo * Math.pow(hi / lo, frac);
-                const bin = Math.round((hz / nyquist) * (freq.length - 1));
-                return clamp(bin, 0, freq.length - 1);
+            function wrappedPeak(t, center, width) {
+                const delta = Math.abs(t - center);
+                const distance = Math.min(delta, 1 - delta);
+                const peak = clamp(1 - distance / width, 0, 1);
+                return peak * peak;
             }
 
-            function rebuildBinMap() {
-                if (!ac || !freq) return;
-                for (let i = 0; i < TERRAIN_COLS; i++) {
-                    columnBins[i] = logIndex(i, TERRAIN_COLS, 24, 16000, ac.sampleRate);
-                }
+            function palette(u) {
+                const x = clamp(u, 0, 0.9999) * (PALETTE.length - 1);
+                const i = Math.floor(x);
+                const f = x - i;
+                const a = PALETTE[i];
+                const b = PALETTE[Math.min(i + 1, PALETTE.length - 1)];
+                return [mix(a[0], b[0], f), mix(a[1], b[1], f), mix(a[2], b[2], f)];
             }
 
-            function initStaticData() {
-                let t = 0;
-                for (let row = 0; row < TERRAIN_ROWS; row++) {
-                    const v = row / (TERRAIN_ROWS - 1);
-                    for (let col = 0; col < TERRAIN_COLS; col++) {
-                        const u = col / (TERRAIN_COLS - 1);
-                        terrainU[t] = u;
-                        terrainV[t] = v;
-
-                        const color = paletteColor(clamp(u * 0.82 + (1 - v) * 0.18, 0, 1));
-                        terrainColors[t * 3] = color[0];
-                        terrainColors[t * 3 + 1] = color[1];
-                        terrainColors[t * 3 + 2] = color[2];
-                        t++;
-                    }
-                }
-
-                let p = 0;
-                for (let col = 0; col < TRAIL_COLS; col++) {
-                    const u = col / (TRAIL_COLS - 1);
-                    const color = paletteColor(clamp(u * 0.86 + 0.08, 0, 1));
-                    for (let seg = 0; seg < TRAIL_SEGMENTS; seg++) {
-                        trailColors[p * 3] = color[0];
-                        trailColors[p * 3 + 1] = color[1];
-                        trailColors[p * 3 + 2] = color[2];
-                        p++;
-                    }
-                }
+            function rgba(color, alpha) {
+                const r = Math.round(color[0] * 255);
+                const g = Math.round(color[1] * 255);
+                const b = Math.round(color[2] * 255);
+                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
             }
 
-            function uploadStaticBuffers() {
-                gl.bindBuffer(gl.ARRAY_BUFFER, terrainColorBuffer);
-                gl.bufferData(gl.ARRAY_BUFFER, terrainColors, gl.STATIC_DRAW);
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, trailColorBuffer);
-                gl.bufferData(gl.ARRAY_BUFFER, trailColors, gl.STATIC_DRAW);
-            }
-
-            function bindAttribute(buffer, location, size) {
-                gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-                gl.enableVertexAttribArray(location);
-                gl.vertexAttribPointer(location, size, gl.FLOAT, false, 0, 0);
+            function laneU(i) {
+                return i / Math.max(1, CONFIG.laneCount - 1);
             }
 
             function resize() {
-                const dpr = Math.max(1, Math.min(1.25, window.devicePixelRatio || 1));
-                canvas.width = Math.floor(window.innerWidth * dpr);
-                canvas.height = Math.floor(window.innerHeight * dpr);
-                gl.viewport(0, 0, canvas.width, canvas.height);
+                dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 1.5));
+                width = window.innerWidth;
+                height = window.innerHeight;
+                canvas.width = Math.floor(width * dpr);
+                canvas.height = Math.floor(height * dpr);
+                canvas.style.width = `${width}px`;
+                canvas.style.height = `${height}px`;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                horizonY = height * CONFIG.horizonY;
+                initStars();
+            }
+
+            function initStars() {
+                stars.length = 0;
+                for (let i = 0; i < CONFIG.starCount; i++) stars.push(makeStar());
+            }
+
+            function makeStar() {
+                return {
+                    x: Math.random() * width,
+                    y: Math.random() * horizonY * 0.94,
+                    a: 0.08 + Math.random() * 0.34,
+                    s: 0.4 + Math.random() * 0.8
+                };
+            }
+
+            function buildBandMap() {
+                if (!audioContext || !freqData) return;
+                const nyquist = audioContext.sampleRate / 2;
+                bandMap = new Uint16Array(CONFIG.spectrumSize);
+                for (let i = 0; i < CONFIG.spectrumSize; i++) bandMap[i] = bandIndex(i, nyquist);
+            }
+
+            function bandIndex(i, nyquist) {
+                const t = i / Math.max(1, CONFIG.spectrumSize - 1);
+                const hz = 24 * Math.pow(17000 / 24, t);
+                const bin = Math.round((hz / nyquist) * (freqData.length - 1));
+                return clamp(bin, 0, freqData.length - 1);
             }
 
             function updateSpectrum(now) {
-                if (analyser) {
-                    analyser.getByteFrequencyData(freq);
-                    let peak = 0;
-                    let peakBin = 0;
-                    for (let i = 0; i < TERRAIN_COLS; i++) {
-                        const raw = Math.pow(freq[columnBins[i]] / 255, 1.4);
-                        spectrum[i] = spectrum[i] * 0.78 + raw * 0.22;
-                        if (spectrum[i] > peak) {
-                            peak = spectrum[i];
-                            peakBin = columnBins[i];
-                        }
-                    }
-                    dominantHz = (peakBin / Math.max(1, freq.length - 1)) * (ac.sampleRate / 2);
-                    return;
-                }
-
-                for (let i = 0; i < TERRAIN_COLS; i++) {
-                    const u = i / (TERRAIN_COLS - 1);
-                    const idle = 0.08
-                        + 0.05 * Math.sin(now * 0.00055 + u * 18)
-                        + 0.03 * Math.cos(now * 0.00023 + u * 42);
-                    spectrum[i] = spectrum[i] * 0.92 + clamp(idle, 0, 0.22) * 0.08;
-                }
-            }
-
-            function terrainHeight(u, v, now) {
-                const mirror = Math.abs(u - 0.5) * 2;
-                const band = spectrum[Math.min(TERRAIN_COLS - 1, Math.floor(mirror * (TERRAIN_COLS - 1)))];
-                const detail = spectrum[Math.min(TERRAIN_COLS - 1, Math.floor(u * (TERRAIN_COLS - 1)))];
-                const near = 1 - v;
-                const swell = Math.pow(band, 1.2) * (4.4 * (0.45 + near * 0.95));
-                const ripple = Math.sin(u * 14.0 + now * 0.0008 - v * 16.0) * (0.35 + near * 0.55);
-                const ridge = Math.cos(u * 22.0 - v * 28.0 + now * 0.00034) * (0.12 + detail * 0.3);
-                return -3.8 + swell + ripple + ridge;
-            }
-
-            function updateTerrain(now) {
-                let p = 0;
-                for (let i = 0; i < TERRAIN_COUNT; i++) {
-                    const u = terrainU[i];
-                    const v = terrainV[i];
-                    const near = 1 - v;
-                    const width = 17.5;
-                    const x = (u - 0.5) * width;
-                    const z = 2.2 + v * 23.5;
-                    const y = terrainHeight(u, v, now);
-                    const band = spectrum[Math.min(TERRAIN_COLS - 1, Math.floor(u * (TERRAIN_COLS - 1)))];
-                    const crest = Math.pow(clamp(band, 0, 1), 1.25);
-
-                    terrainPositions[p] = x;
-                    terrainPositions[p + 1] = y;
-                    terrainPositions[p + 2] = z;
-                    terrainSizes[i] = 2.0 + crest * 5.4 + near * 0.6;
-                    p += 3;
-                }
-            }
-
-            function updateTrails(now) {
-                let p = 0;
-                for (let col = 0; col < TRAIL_COLS; col++) {
-                    const u = col / (TRAIL_COLS - 1);
-                    const amp = spectrum[col];
-                    const active = Math.pow(clamp((amp - 0.1) * 1.35, 0, 1), 1.15);
-                    const vBase = 0.24 + (1 - active) * 0.06;
-                    const x = (u - 0.5) * 17.5;
-                    const z = 2.2 + vBase * 23.5;
-                    const crestY = terrainHeight(u, vBase, now);
-
-                    for (let seg = 0; seg < TRAIL_SEGMENTS; seg++) {
-                        const f = seg / (TRAIL_SEGMENTS - 1);
-                        const idx = col * TRAIL_SEGMENTS + seg;
-                        trailPositions[p] = x;
-                        trailPositions[p + 1] = crestY + f * active * 6.8;
-                        trailPositions[p + 2] = z - f * 0.1;
-                        trailSizes[idx] = active > 0.02 ? (0.8 + (1 - f) * 1.8 + active * 3.0) : 0.01;
-                        p += 3;
+                if (analyser && freqData) analyser.getByteFrequencyData(freqData);
+                let peak = 0;
+                let peakIndex = 0;
+                for (let i = 0; i < CONFIG.spectrumSize; i++) {
+                    const raw = analyser ? freqData[bandMap[i]] / 255 : idleBand(now, i / CONFIG.spectrumSize);
+                    const smooth = i < 24 ? 0.8 : i > 90 ? 0.6 : 0.7;
+                    smoothed[i] = smoothed[i] * smooth + raw * (1 - smooth);
+                    if (smoothed[i] > peak) {
+                        peak = smoothed[i];
+                        peakIndex = i;
                     }
                 }
+                dominantHz = 24 * Math.pow(17000 / 24, peakIndex / Math.max(1, CONFIG.spectrumSize - 1));
+                updateStats();
             }
 
-            function uploadDynamicBuffers() {
-                gl.bindBuffer(gl.ARRAY_BUFFER, terrainPosBuffer);
-                gl.bufferData(gl.ARRAY_BUFFER, terrainPositions, gl.DYNAMIC_DRAW);
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, terrainSizeBuffer);
-                gl.bufferData(gl.ARRAY_BUFFER, terrainSizes, gl.DYNAMIC_DRAW);
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, trailPosBuffer);
-                gl.bufferData(gl.ARRAY_BUFFER, trailPositions, gl.DYNAMIC_DRAW);
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, trailSizeBuffer);
-                gl.bufferData(gl.ARRAY_BUFFER, trailSizes, gl.DYNAMIC_DRAW);
+            function idleBand(now, t) {
+                const seconds = now * 0.001;
+                const laneA = wrappedPeak(t, (0.18 + seconds * 0.024) % 1, 0.12) * (0.5 + 0.5 * Math.sin(seconds * 1.7));
+                const laneB = wrappedPeak(t, (0.52 - seconds * 0.017 + 1) % 1, 0.1) * (0.5 + 0.5 * Math.sin(seconds * 2.1 + 1.2));
+                const laneC = wrappedPeak(t, (0.82 + seconds * 0.012) % 1, 0.14) * (0.5 + 0.5 * Math.cos(seconds * 1.3 + 0.7));
+                const shimmer = 0.5 + 0.5 * Math.sin(seconds * 8.4 + t * 48);
+                const undertow = 0.5 + 0.5 * Math.cos(seconds * 2.6 - t * 22);
+                return clamp(laneA * 0.34 + laneB * 0.28 + laneC * 0.26 + shimmer * 0.08 + undertow * 0.1, 0, 1);
             }
 
-            function render(now) {
-                updateSpectrum(now);
-                updateTerrain(now);
-                updateTrails(now);
-                uploadDynamicBuffers();
+            function updateStats() {
+                const nextEnergy = average(8, 60);
+                const nextBass = average(2, 20);
+                const prev = energy;
+                energy = energy * 0.84 + nextEnergy * 0.16;
+                bass = bass * 0.82 + nextBass * 0.18;
+                punch = punch * 0.76 + Math.max(0, energy - prev) * 3.2;
+                energyEl.textContent = energy.toFixed(2);
+                punchEl.textContent = punch.toFixed(2);
+                peakEl.textContent = `${Math.round(dominantHz)} Hz`;
+                modeEl.textContent = analyser ? 'Race' : 'Wake';
+            }
 
-                gl.clearColor(0, 0, 0, 1);
-                gl.clear(gl.COLOR_BUFFER_BIT);
+            function average(lo, hi) {
+                let sum = 0;
+                let count = 0;
+                for (let i = lo; i <= hi; i++) {
+                    sum += smoothed[clamp(i, 0, CONFIG.spectrumSize - 1)];
+                    count++;
+                }
+                return count ? sum / count : 0;
+            }
 
-                gl.useProgram(program);
-                gl.uniform1f(locAspect, canvas.width / canvas.height);
-                gl.uniform1f(locPointScale, canvas.height * 0.11);
+            function updateRows(dt, now) {
+                sampleClock += dt;
+                while (sampleClock >= CONFIG.sampleMs) {
+                    sampleClock -= CONFIG.sampleMs;
+                    rows.unshift(makeSnapshot(now));
+                }
+                rows.forEach((row) => {
+                    row.age += dt;
+                });
+                while (rows.length && rows[rows.length - 1].age > CONFIG.travelMs) rows.pop();
+            }
 
-                bindAttribute(terrainPosBuffer, locPosition, 3);
-                bindAttribute(terrainColorBuffer, locColor, 3);
-                bindAttribute(terrainSizeBuffer, locSize, 1);
-                gl.drawArrays(gl.POINTS, 0, TERRAIN_COUNT);
+            function makeSnapshot(now) {
+                const values = new Float32Array(CONFIG.laneCount);
+                for (let i = 0; i < CONFIG.laneCount; i++) values[i] = sampleLane(now, laneU(i));
+                return { values, age: 0 };
+            }
 
-                bindAttribute(trailPosBuffer, locPosition, 3);
-                bindAttribute(trailColorBuffer, locColor, 3);
-                bindAttribute(trailSizeBuffer, locSize, 1);
-                gl.drawArrays(gl.POINTS, 0, TRAIL_COUNT);
+            function sampleLane(now, u) {
+                if (!analyser) return idleBand(now, u);
+                return smoothed[Math.floor(u * (CONFIG.spectrumSize - 1))];
+            }
 
-                requestAnimationFrame(render);
+            function clearFrame() {
+                const grad = ctx.createLinearGradient(0, 0, 0, height);
+                grad.addColorStop(0, '#0b1a34');
+                grad.addColorStop(0.34, '#060b16');
+                grad.addColorStop(0.58, '#020207');
+                grad.addColorStop(1, '#000');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, width, height);
+                drawStars();
+            }
+
+            function drawStars() {
+                stars.forEach((star, i) => drawStar(star, i));
+            }
+
+            function drawStar(star, i) {
+                const drift = (performance.now() * 0.006 * star.s) % (width + 80);
+                const x = (star.x + drift) % (width + 80) - 40;
+                const twinkle = 0.7 + 0.3 * Math.sin(performance.now() * 0.001 + i);
+                drawDot(x, star.y, CONFIG.dotRadius, [0.4, 0.95, 1.0], star.a * twinkle);
+            }
+
+            function drawDot(x, y, radius, color, alpha) {
+                if (y <= radius * 2 || alpha <= 0) return;
+                ctx.fillStyle = rgba(color, alpha);
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            function drawRows() {
+                for (let i = rows.length - 1; i >= 0; i--) drawRow(rows[i]);
+            }
+
+            function drawRow(row) {
+                const depth = row.age / CONFIG.travelMs;
+                if (depth <= 0 || depth >= 1) return;
+                const widthNow = rowWidth(depth);
+                const y = rowY(depth);
+                for (let lane = 0; lane < CONFIG.laneCount; lane++) drawRowDot(row, lane, widthNow, y, depth);
+            }
+
+            function drawRowDot(row, lane, widthNow, y, depth) {
+                const u = laneU(lane);
+                const x = width * 0.5 + (u * 2 - 1) * widthNow * 0.5;
+                const amp = row.values[lane];
+                const lift = amp * CONFIG.horizonLift * (1 - depth);
+                const fade = 1 - smoothstep(0, 1, depth);
+                const sparkle = 0.82 + 0.18 * Math.sin(row.age * 0.004 + lane * 0.91 + amp * 11.7);
+                const glow = (0.02 + amp * 0.16) * fade * sparkle;
+                const color = palette(u);
+                if (glow > 0.006) drawDot(x, y - lift, CONFIG.dotRadius * 3.8, color, glow);
+                drawDot(x, y - lift, CONFIG.dotRadius, color, (0.08 + amp * 0.9) * fade);
+            }
+
+            function rowWidth(depth) {
+                return mix(width * CONFIG.horizonWidth, width * CONFIG.nearWidth, Math.pow(depth, 0.92));
+            }
+
+            function rowY(depth) {
+                const t = Math.pow(depth, 1.75);
+                return mix(horizonY, height * (1 + CONFIG.bottomOverscan), t);
+            }
+
+            function drawHorizon() {
+                const newest = rows[0];
+                if (!newest) return;
+                for (let lane = 0; lane < CONFIG.laneCount; lane++) drawHorizonDot(newest, lane);
+                for (let lane = 0; lane < CONFIG.laneCount - 1; lane++) drawHorizonMidDot(newest, lane);
+            }
+
+            function drawHorizonDot(row, lane) {
+                const u = laneU(lane);
+                const x = width * 0.5 + (u * 2 - 1) * width * CONFIG.horizonWidth * 0.5;
+                const amp = row.values[lane];
+                const jitter = (Math.sin(lane * 12.73 + amp * 19.1) * 0.5 + 0.5) * 10;
+                const y = horizonY - amp * CONFIG.horizonLift - jitter * smoothstep(0.02, 0.3, amp);
+                const topFade = smoothstep(0.16 * height, 0.34 * height, y);
+                const color = palette(u);
+                if (amp > 0.001 && topFade > 0.02) {
+                    drawDot(x, y, CONFIG.dotRadius * 5, color, (0.08 + amp * 0.12) * topFade);
+                    drawDot(x, y, CONFIG.dotRadius * 1.9, [1, 1, 1], (0.08 + amp * 0.14) * topFade);
+                }
+                if (topFade > 0.02) drawDot(x, y, CONFIG.dotRadius, color, (0.32 + amp * 0.78) * topFade);
+            }
+
+            function drawHorizonMidDot(row, lane) {
+                const u0 = laneU(lane);
+                const u1 = laneU(lane + 1);
+                const u = (u0 + u1) * 0.5;
+                const amp = (row.values[lane] + row.values[lane + 1]) * 0.5;
+                const x = width * 0.5 + (u * 2 - 1) * width * CONFIG.horizonWidth * 0.5;
+                const jitter = (Math.sin((lane + 0.5) * 10.91 + amp * 17.3) * 0.5 + 0.5) * 8;
+                const y = horizonY - amp * CONFIG.horizonLift - jitter * smoothstep(0.02, 0.3, amp);
+                const topFade = smoothstep(0.16 * height, 0.34 * height, y);
+                const color = palette(u);
+                if (amp <= 0.001 || topFade <= 0.02) return;
+                drawDot(x, y, CONFIG.dotRadius * 0.9, color, (0.24 + amp * 0.52) * topFade);
+            }
+
+            function drawScanlines() {
+                ctx.fillStyle = `rgba(255,255,255,${CONFIG.scanlineAlpha})`;
+                for (let y = 0; y < height; y += 4) ctx.fillRect(0, y, width, 1);
+            }
+
+            function drawVignette() {
+                const grad = ctx.createRadialGradient(width * 0.5, height * 0.58, width * 0.2, width * 0.5, height * 0.58, width * 0.78);
+                grad.addColorStop(0, 'rgba(0,0,0,0)');
+                grad.addColorStop(1, 'rgba(0,0,0,0.46)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, width, height);
+            }
+
+            function setMessage(text) {
+                msg.textContent = text;
+            }
+
+            function setOverlayVisible(visible) {
+                ui.classList.toggle('hidden', !visible);
+            }
+
+            function scheduleOverlayHide(delay = 10000) {
+                clearTimeout(overlayTimer);
+                if (!analyser) return;
+                overlayTimer = window.setTimeout(() => setOverlayVisible(false), delay);
+            }
+
+            function revealOverlayTemporarily() {
+                setOverlayVisible(true);
+                clearTimeout(hoverTimer);
+                hoverTimer = window.setTimeout(() => scheduleOverlayHide(2500), 1200);
+            }
+
+            function updateButtons() {
+                toggleAudioBtn.textContent = analyser ? 'Stop' : 'Start mic';
+                fullscreenBtn.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
             }
 
             async function startAudio() {
-                if (started) return;
-                started = true;
+                if (analyser) return;
                 try {
-                    ac = new (window.AudioContext || window.webkitAudioContext)();
-                    stream = await navigator.mediaDevices.getUserMedia({
-                        audio: {
-                            echoCancellation: false,
-                            noiseSuppression: false,
-                            autoGainControl: false
-                        }
-                    });
-                    const src = ac.createMediaStreamSource(stream);
-                    analyser = ac.createAnalyser();
-                    analyser.fftSize = 2048;
-                    analyser.smoothingTimeConstant = 0.85;
-                    src.connect(analyser);
-                    freq = new Uint8Array(analyser.frequencyBinCount);
-                    rebuildBinMap();
-                    await ac.resume();
-                } catch (_) {
-                    started = false;
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const source = audioContext.createMediaStreamSource(stream);
+                    analyser = audioContext.createAnalyser();
+                    analyser.fftSize = CONFIG.fftSize;
+                    analyser.smoothingTimeConstant = 0.72;
+                    source.connect(analyser);
+                    freqData = new Uint8Array(analyser.frequencyBinCount);
+                    buildBandMap();
+                    updateButtons();
+                    setMessage('Live mode. The horizon captures one audio snapshot per second and sends each one down the dotted road.');
+                    setOverlayVisible(true);
+                    scheduleOverlayHide();
+                } catch (error) {
+                    console.error(error);
+                    stopAudio();
+                    setMessage('Microphone access failed. Idle mode stays active with synthetic horizon snapshots.');
                 }
             }
 
-            canvas.addEventListener('pointerdown', startAudio, { passive: true });
+            function stopAudio() {
+                clearTimeout(overlayTimer);
+                clearTimeout(hoverTimer);
+                if (stream) stream.getTracks().forEach((track) => track.stop());
+                if (audioContext) audioContext.close().catch(() => { });
+                audioContext = null;
+                analyser = null;
+                stream = null;
+                freqData = null;
+                bandMap = new Uint16Array(0);
+                updateButtons();
+                setMessage('Idle mode. Synthetic horizon snapshots keep flowing toward you until the mic starts.');
+                setOverlayVisible(true);
+            }
+
+            async function toggleAudio() {
+                if (analyser) stopAudio();
+                else await startAudio();
+            }
+
+            async function toggleFullscreen() {
+                if (document.fullscreenElement) await document.exitFullscreen();
+                else await document.documentElement.requestFullscreen();
+                updateButtons();
+            }
+
+            function frame(now) {
+                requestAnimationFrame(frame);
+                if (!lastFrame) lastFrame = now;
+                const dt = Math.min(40, now - lastFrame);
+                lastFrame = now;
+                updateSpectrum(now);
+                updateRows(dt, now);
+                clearFrame();
+                drawRows();
+                drawHorizon();
+                drawScanlines();
+                drawVignette();
+            }
+
+            toggleAudioBtn.addEventListener('click', () => toggleAudio().catch(console.error));
+            fullscreenBtn.addEventListener('click', () => toggleFullscreen().catch(console.error));
+            window.addEventListener('mousemove', revealOverlayTemporarily);
+            window.addEventListener('pointerdown', revealOverlayTemporarily);
+            document.addEventListener('fullscreenchange', updateButtons);
             window.addEventListener('resize', resize);
 
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-
             resize();
-            initStaticData();
-            uploadStaticBuffers();
-            requestAnimationFrame(render);
+            updateButtons();
+            setOverlayVisible(true);
+            rows.unshift(makeSnapshot(0));
+            requestAnimationFrame(frame);
         })();
     </script>
 </body>

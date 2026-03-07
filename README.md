@@ -1,28 +1,24 @@
-# Futuristic 3D Music Visualizer
+# VIZ421
 
-A browser-based music visualizer that turns live microphone input into a neon sci-fi landscape with waveform hills, spiral spectrums, glowing particles, and cinematic light effects.
+VIZ421 is a single-file Chrome music visualizer that turns live microphone input into a retro-futuristic dotted rainbow road. Each audio snapshot is captured at the horizon and then travels toward the viewer like a stylized arcade racing scene.
 
-## Overview
+## What It Does
 
-This project is a single-page visual experiment built in plain HTML, CSS, and JavaScript. It uses the Canvas 2D API for rendering and the Web Audio API for real-time frequency analysis, then maps that audio energy into a stylized cosmic scene.
+This project renders a TRON-meets-Rad-Racer visualizer using only native browser APIs.
 
-When the microphone is active, the visualizer reacts to sound with:
+- Every visible element is made from small glowing dots
+- Color is mapped strictly from left to right across the screen
+- The horizon acts as the live audio source
+- Each sampled spectrum row is frozen, then moves forward through a perspective field
+- Idle mode still animates with synthetic horizon snapshots when the mic is off
 
-- layered waveform terrain
-- a circular spiral spectrum
-- glowing particle crests
-- far-distance light towers
-- star dust, halo bloom, and floor-grid depth cues
-- live energy, punch, peak-frequency, and mode stats
+## Current Visual Direction
 
-## Features
-
-- Single-file app with no build step
-- Real-time microphone input analysis
-- Responsive full-screen canvas layout
-- Performance-aware rendering that adapts visual quality by frame timing
-- Neon cyber-cosmic visual style with animated particles and chromatic glow
-- Simple start/stop controls with live status messaging
+- Flat dotted retro road / perspective field
+- Pure black and deep blue space backdrop
+- Neon rainbow horizon source
+- Small ASMR-like particles with subtle glow
+- Chrome-friendly microphone-driven playback
 
 ## Tech
 
@@ -32,37 +28,38 @@ When the microphone is active, the visualizer reacts to sound with:
 - Canvas 2D API
 - Web Audio API
 
-## Getting Started
+## Run Locally
 
-Because browser microphone access is unreliable on `file://`, run the project from a local server.
+Microphone access is unreliable on `file://`, so run the page from a local server.
 
-### Option 1: Python
+### Simple Python server
 
 ```bash
 python3 -m http.server 8080
 ```
 
-Then open:
+Open:
 
 ```text
 http://localhost:8080
 ```
 
-### Option 2: Node
+### Live reload during development
 
 ```bash
-npx serve .
+npx live-server --port=8080
 ```
-
-Open the local URL shown in the terminal.
 
 ## How To Use
 
-1. Open the app in a modern desktop or mobile browser.
-2. Click `Start mic`.
-3. Allow microphone access when prompted.
-4. Speak, play music nearby, or feed audio into your microphone.
-5. Click `Stop` to pause the visualizer.
+1. Open the app in Chrome or another modern browser
+2. Click `Start mic`
+3. Allow microphone access
+4. Speak or play audio near the microphone
+5. Use the same button again to stop the mic
+6. Use `Fullscreen` for the cleanest presentation
+
+The control overlay auto-hides after mic start and reappears when you move the mouse.
 
 ## Project Structure
 
@@ -78,17 +75,16 @@ Open the local URL shown in the terminal.
 
 ## Notes
 
-- The visualizer is intentionally kept lightweight and lives entirely in `index.html`.
-- Audio reactivity is driven by analyser frequency data and smoothed energy bands.
-- Rendering quality scales dynamically to help maintain performance across devices.
-- Best results come from Chromium-based browsers or Safari with microphone permissions enabled.
+- The entire app lives in `index.html`
+- No external dependencies, no CDN assets, no frameworks
+- Snapshot cadence, perspective, glow, and color behavior are easy to tweak from the config block in `index.html`
+- The visualizer is currently tuned around Chrome behavior first
 
-## Customization Ideas
+## Production Notes
 
-- Tune the color palette for a different mood
-- Adjust analyser settings for sharper or smoother response
-- Change particle density and grid depth for performance or style
-- Swap the UI copy and overlay styling for a different presentation
+- Host over `http://localhost` in development and HTTPS in production for reliable mic permissions
+- Keep the file single-page and lightweight unless there is a strong reason to split it
+- If visual changes drift away from the road/snapshot concept, re-check the horizon sampling model before adding more effects
 
 ## License
 

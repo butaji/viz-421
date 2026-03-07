@@ -1,14 +1,14 @@
 # Task Plan
 
-- [x] Inspect the current project structure and visualizer behavior.
-- [x] Rewrite `AGENTS.md` so it reflects this browser-based music visualizer project.
-- [x] Review the updated guidance for project fit, clarity, and verification expectations.
-- [x] Review project details and existing task notes to scope the README content.
-- [x] Write a project-specific `README.md` for the music visualizer.
-- [x] Review the README for accuracy, usability, and GitHub presentation quality.
+- [x] Rewrite project documentation for the current dot-road visualizer.
+- [x] Align project guidance with the current TRON + Rad Racer horizon-snapshot implementation.
+- [x] Review docs for consistency with the current single-file app.
+- [x] Improve the idle no-mic motion so the horizon feed feels more musical and ASMR-like.
 
 ## Review
-- Updated `AGENTS.md` to reference the actual repo shape: single-page `index.html`, Canvas 2D rendering, Web Audio API, and microphone-driven behavior.
-- Added project-specific guidance for performance, responsiveness, audio verification, and preserving the current neon sci-fi aesthetic.
-- Added `README.md` with a GitHub-ready overview, feature list, local setup steps, usage notes, tech summary, and customization guidance for this microphone-driven browser visualizer.
-- Verified the README content against the current implementation in `index.html`, including the local-server requirement for microphone access on non-`file://` origins.
+
+- `README.md` now reflects the current product: a dot-only rainbow road visualizer with horizon snapshots that travel toward the viewer.
+- Project naming is now aligned to `VIZ421`.
+- `AGENTS.md` now describes the present project direction instead of the older terrain/spiral concept.
+- Documentation is now aligned around the current single-file Canvas 2D + Web Audio implementation and production usage flow.
+- Idle mode now uses layered drifting peaks and shimmer instead of simple repeating waves.

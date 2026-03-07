@@ -1,3 +1,26 @@
 # Lessons
 
-- No project-specific lessons captured yet.
+- When a user asks to adapt repository instructions, rewrite them to match the actual project structure and runtime constraints instead of keeping generic engineering guidance.
+- For this visualizer, preserve the reference camera language: angled 3D overhead view, layered left-to-right wave bands, crest-weighted particle emphasis, and depth sold by perspective/occlusion before adding extra fog or effects.
+- In this single-file project, substantial visual rewrites should still be organized into clear sections with human-friendly naming and grouping rather than leaving the file as a long uninterrupted script.
+- When the user gives a camera-direction correction, adjust the scene framing directly with camera position, target, roll, and terrain drift rather than only tweaking color or wave math.
+- If the user wants a surface seen from above, raise the camera and smooth the relief so the scene reads as a continuous landscape first and a particle effect second.
+- When updating project instructions, include the user's coding-style constraints explicitly, especially function-length limits and preference for declarative function-chain style.
+- If a screen corner is empty, fix the scene composition by expanding terrain coverage and camera framing before adding decorative filler.
+- If directional motion is requested, move the sampled surface positions themselves; phase-only changes can read as stuck even when the math is animating.
+- After motion refactors, verify every moved variable still exists in each render path; a single undefined value can blank the whole visualizer.
+- For endless-wave illusions, wrap and redraw line rows beyond the visible span; extending composition works better than trying to fake infinity with a single finite strip.
+- If wave lines still feel pinned, animate their lateral deformation as well as height; surface motion needs visible row drift, not only vertical change.
+- When a lower corner stays empty, first widen the foreground span and re-aim the camera before increasing visual effects density.
+- If the user says line positions must stay fixed, decouple line geometry from animated particle geometry instead of trying to compromise with smaller line motion.
+- If an edge is still exposed after a framing tweak, increase terrain overscan and line wrap distance before adding more motion or visual detail.
+- For road-like motion, weight particle travel by depth so the horizon feels active and near-camera rows feel comparatively anchored.
+- If advection starts to look like frozen snapshots sliding toward the camera, switch to traveling brightness/size pulses over fixed geometry instead of moving particle positions through depth.
+- For arcade-road framing, center the camera and use left-to-right color mapping; depth-based hue shifts read more like landscape bands than a game road.
+- For a Rad Racer road illusion, use a row-history feed: capture the newest spectrum state at the horizon and propagate older rows toward the camera.
+- If the result still reads as waves, flatten the static road geometry first; motion cues work better on a simple crowned road than on a rolling surface.
+- If idle motion feels like blinking instead of travel, generate an explicit animated horizon feed and push multiple history rows per frame rather than relying on slow ambient band changes alone.
+- For a TRON + Rad Racer blend, keep the road geometry simple and inject the TRON feel through cyan-magenta glow, center-lane guidance, and cool background lighting rather than adding more surface complexity.
+- For ASMR-like particle scenes, reduce dot size and vertical displacement first; too much lift makes the scene read as a fountain instead of a calm flowing field.
+- When the user wants a dotted retro road, the simplest reliable model is a row-history system: sample the horizon on a fixed cadence, freeze each row, and animate only its perspective position over time.
+- If the overlay auto-hides, mouse movement should reveal it again; control discoverability matters as much as keeping the scene visually clean.

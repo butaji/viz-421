@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This project is a single-page, browser-based music visualizer in `index.html`. It uses the Canvas 2D API, the Web Audio API, and microphone input to render a neon sci-fi landscape with waveform, particle, and spiral-spectrum effects. Keep changes lightweight, readable, and performance-aware.
+This project is a single-page, browser-based music visualizer in `index.html`. It uses the Canvas 2D API, the Web Audio API, and microphone input to render a dotted retro-futuristic road where horizon spectrum snapshots travel toward the viewer in a TRON-meets-Rad-Racer style. Keep changes lightweight, readable, and performance-aware.
 
 ### 1. Plan Mode Default
 - Enter plan mode for any non-trivial change, especially anything that affects audio analysis, render performance, UI structure, or microphone flow.
@@ -21,7 +21,7 @@ This project is a single-page, browser-based music visualizer in `index.html`. I
 
 ### 4. Verification Before Done
 - Never mark work done without verifying it against how this visualizer actually behaves.
-- For UI or animation changes, verify desktop and mobile sizing, overlay readability, and whether the scene still feels intentional.
+- For UI or animation changes, verify desktop and mobile sizing, overlay readability, and whether the road perspective, horizon source, and dot-only look still feel intentional.
 - For audio changes, verify start/stop flow, permission failure messaging, stats updates, and that animation still idles cleanly when audio is off.
 - When relevant, compare behavior before and after the change, especially frame pacing, particle density, and responsiveness to sound.
 - Use a local server for browser testing because microphone access is unreliable on `file://`.
@@ -29,6 +29,8 @@ This project is a single-page, browser-based music visualizer in `index.html`. I
 ### 5. Demand Elegance (Balanced)
 - Favor simple, contained edits inside the existing single-file architecture unless there is a strong reason to split code out.
 - Keep rendering code clear: extract helper functions only when they genuinely reduce repetition or make math easier to reason about.
+- Keep functions small: target 20 lines max per function unless there is a strong, documented reason not to.
+- Prefer declarative style and function chains over long imperative blocks when shaping data, render inputs, and UI state.
 - Do not add generic UI chrome, unnecessary controls, or visual clutter that weakens the current cinematic look.
 - If a fix feels patchy, step back and choose the cleaner approach for the render loop, audio data mapping, or DOM overlay.
 
@@ -49,6 +51,6 @@ This project is a single-page, browser-based music visualizer in `index.html`. I
 - **Single-File Discipline**: Preserve the lightweight nature of the project; avoid adding tooling or structure unless the task clearly needs it.
 - **Performance First**: Treat every new effect as a frame-budget decision, especially in the main draw loop.
 - **Audio Reactivity Over Noise**: Visual changes should feel tied to energy, punch, and frequency content rather than random motion.
-- **Intentional Aesthetic**: Preserve the futuristic neon-cosmic direction; new visuals should match the existing atmosphere.
+- **Intentional Aesthetic**: Preserve the dotted TRON-racer direction; new visuals should reinforce the horizon-to-viewer road feed instead of drifting back toward generic terrain.
 - **Responsive By Default**: Ensure the overlay and canvas still work cleanly across desktop and mobile.
 - **Minimal Impact**: Change only what is necessary and avoid regressions in start/stop behavior or idle state rendering.
