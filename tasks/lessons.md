@@ -24,3 +24,8 @@
 - For ASMR-like particle scenes, reduce dot size and vertical displacement first; too much lift makes the scene read as a fountain instead of a calm flowing field.
 - When the user wants a dotted retro road, the simplest reliable model is a row-history system: sample the horizon on a fixed cadence, freeze each row, and animate only its perspective position over time.
 - If the overlay auto-hides, mouse movement should reveal it again; control discoverability matters as much as keeping the scene visually clean.
+- When the user says they want to "fall" through fractals, treat the motion as center-origin expansion toward the screen borders, not growth from the horizon or branching upward.
+- If the user asks to use the same dynamics as the road, reuse row age as the primary motion driver and avoid extra lateral drift that changes the perceived origin.
+- When a visual mode is user-addressable, mirror it in `location.hash` so reloads, direct links, and browser navigation preserve the current view.
+- If the user says the fractal view feels shaky, freeze each shell's shape at snapshot time and animate only its age-based travel; time-driven wobble breaks the falling illusion.
+- If the alternate mode should feel like the road, reuse the exact row-history travel model and only swap the projection from horizon-forward to center-outward.

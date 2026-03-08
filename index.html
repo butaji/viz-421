@@ -182,6 +182,7 @@
             <p id="msg">Start the microphone to capture the live horizon spectrum and send each one-second snapshot down the rainbow road.</p>
             <div class="controls">
                 <button id="toggle-audio">Start mic</button>
+                <button id="toggle-view">View: Road</button>
                 <button id="fullscreen">Fullscreen</button>
             </div>
         </div>
@@ -189,7 +190,7 @@
             <div class="stat"><span>Energy</span><strong id="energy">0.00</strong></div>
             <div class="stat"><span>Punch</span><strong id="punch">0.00</strong></div>
             <div class="stat"><span>Peak</span><strong id="peak">0 Hz</strong></div>
-            <div class="stat"><span>Mode</span><strong id="mode">Wake</strong></div>
+            <div class="stat"><span>View</span><strong id="mode">Road</strong></div>
         </div>
     </div>
     <canvas id="scene"></canvas>
@@ -200,6 +201,7 @@
             const ctx = canvas.getContext('2d');
             const ui = document.getElementById('ui');
             const toggleAudioBtn = document.getElementById('toggle-audio');
+            const toggleViewBtn = document.getElementById('toggle-view');
             const fullscreenBtn = document.getElementById('fullscreen');
             const msg = document.getElementById('msg');
             const energyEl = document.getElementById('energy');
@@ -226,6 +228,21 @@
                 scanlineAlpha: 0.028
             };
 
+            const VIEW_MODES = [
+                { id: 'road', label: 'Road' },
+                { id: 'spacefall', label: 'Spacefall' }
+            ];
+
+            const FRACTAL = {
+                sampleCount: 72,
+                shellMinRadius: 0,
+                shellMaxRadiusFactor: 1.02,
+                radialLift: 120,
+                minAlpha: 0.025,
+                glowScale: 3.4,
+                coreScale: 1.2
+            };
+
             const MAX_ROWS = Math.ceil(CONFIG.travelMs / CONFIG.sampleMs) + 2;
             const STAR_FILL = 'rgb(102,242,255)';
             const WHITE_FILL = 'rgb(255,255,255)';
@@ -249,12 +266,15 @@
             const midLaneCenters = new Float32Array(Math.max(0, CONFIG.laneCount - 1));
             const laneFillStyles = new Array(CONFIG.laneCount);
             const midLaneFillStyles = new Array(Math.max(0, CONFIG.laneCount - 1));
+            const fractalCos = new Float32Array(FRACTAL.sampleCount);
+            const fractalSin = new Float32Array(FRACTAL.sampleCount);
 
             let width = 0;
             let height = 0;
             let dpr = 1;
             let horizonY = 0;
             let centerX = 0;
+            let centerY = 0;
             let horizonHalfWidth = 0;
             let bottomY = 0;
             let topFadeMinY = 0;
@@ -276,6 +296,7 @@
             let rowHead = -1;
             let rowCount = 0;
             let isPageVisible = !document.hidden;
+            let viewModeIndex = 0;
             let energy = 0;
             let punch = 0;
             let bass = 0;
@@ -365,6 +386,7 @@
 
             function buildRenderCaches() {
                 centerX = width * 0.5;
+                centerY = height * 0.5;
                 horizonHalfWidth = width * CONFIG.horizonWidth * 0.5;
                 bottomY = height * (1 + CONFIG.bottomOverscan);
                 topFadeMinY = 0.16 * height;
@@ -386,6 +408,15 @@
                 const scanCtx = scanlineCanvas.getContext('2d');
                 scanCtx.fillStyle = `rgba(255,255,255,${CONFIG.scanlineAlpha})`;
                 for (let y = 0; y < height; y += 4) scanCtx.fillRect(0, y, width, 1);
+                buildFractalTables();
+            }
+
+            function buildFractalTables() {
+                for (let i = 0; i < FRACTAL.sampleCount; i++) {
+                    const angle = (i / FRACTAL.sampleCount) * Math.PI * 2;
+                    fractalCos[i] = Math.cos(angle);
+                    fractalSin[i] = Math.sin(angle);
+                }
             }
 
             function initStars() {
@@ -538,6 +569,130 @@
                 for (let i = rowCount - 1; i >= 0; i--) drawRow(rowIndexFromNewest(i));
             }
 
+            function currentViewMode() {
+                return VIEW_MODES[viewModeIndex];
+            }
+
+            function normalizeModeId(value) {
+                return (value || '').trim().toLowerCase();
+            }
+
+            function viewModeIndexById(modeId) {
+                const normalized = normalizeModeId(modeId);
+                if (normalized === 'fractal') return 1;
+                for (let i = 0; i < VIEW_MODES.length; i++) {
+                    if (VIEW_MODES[i].id === normalized) return i;
+                }
+                return -1;
+            }
+
+            function parseViewModeHash(hash = window.location.hash) {
+                const raw = normalizeModeId(hash.replace(/^#/, ''));
+                if (!raw) return '';
+                if (!raw.includes('=')) return raw;
+                const params = new URLSearchParams(raw);
+                return normalizeModeId(params.get('mode') || params.get('view') || '');
+            }
+
+            function readViewModeFromHash(hash = window.location.hash) {
+                return viewModeIndexById(parseViewModeHash(hash));
+            }
+
+            function syncHashToViewMode(modeId) {
+                const nextHash = `#mode=${modeId}`;
+                if (window.location.hash === nextHash) return;
+                window.location.hash = nextHash;
+            }
+
+            function applyViewModeFromHash() {
+                const nextIndex = readViewModeFromHash();
+                if (nextIndex === -1) return;
+                setViewMode(nextIndex, { syncHash: false, reveal: false });
+                syncHashToViewMode(currentViewMode().id);
+            }
+
+            function handleHashChange() {
+                applyViewModeFromHash();
+            }
+
+            function updateModeLabel() {
+                modeEl.textContent = currentViewMode().label;
+            }
+
+            function updateHeroMessage() {
+                const isLive = Boolean(analyser);
+                const mode = currentViewMode().id;
+                if (mode === 'road') {
+                    setMessage(isLive
+                        ? 'Road mode. Live horizon snapshots stream down the dotted rainbow road. Use the View button or press Space to switch views.'
+                        : 'Road mode. Synthetic horizon snapshots keep flowing toward you until the mic starts. Use the View button or press Space to switch views.');
+                    return;
+                }
+                setMessage(isLive
+                    ? 'Spacefall mode. Live center-born spectrum rows expand from the middle of the screen to the borders using the same frozen travel dynamics as the road. Use the View button or press Space to switch views.'
+                    : 'Spacefall mode. Synthetic center-born spectrum rows expand from the middle of the screen to the borders until the mic starts. Use the View button or press Space to switch views.');
+            }
+
+            function setViewMode(nextIndex, { syncHash = true, reveal = true } = {}) {
+                viewModeIndex = ((nextIndex % VIEW_MODES.length) + VIEW_MODES.length) % VIEW_MODES.length;
+                updateModeLabel();
+                updateButtons();
+                updateHeroMessage();
+                if (reveal) revealOverlayTemporarily();
+                if (syncHash) syncHashToViewMode(currentViewMode().id);
+            }
+
+            function cycleViewMode() {
+                setViewMode(viewModeIndex + 1);
+            }
+
+            function measureBand(values, start, end) {
+                let total = 0;
+                const lo = Math.max(0, start);
+                const hi = Math.min(CONFIG.laneCount - 1, end);
+                for (let i = lo; i <= hi; i++) total += values[i];
+                return total / Math.max(1, hi - lo + 1);
+            }
+
+            function sampleFractalBand(values, t) {
+                const center = Math.floor(clamp(t, 0, 0.9999) * (CONFIG.laneCount - 1));
+                const start = Math.max(0, center - 1);
+                const end = Math.min(CONFIG.laneCount - 1, center + 1);
+                return measureBand(values, start, end);
+            }
+
+            function drawFractalScene(now) {
+                for (let offset = rowCount - 1; offset >= 0; offset--) drawFractalRow(rowIndexFromNewest(offset));
+            }
+
+            function drawFractalRow(rowIndex) {
+                const age = rowAges[rowIndex];
+                const depth = age / CONFIG.travelMs;
+                if (depth <= 0 || depth >= 1) return;
+                const values = rowValues[rowIndex];
+                const outward = rowTravelT(depth);
+                const maxRadius = Math.hypot(width, height) * 0.5 * FRACTAL.shellMaxRadiusFactor;
+                const baseRadius = Math.max(FRACTAL.shellMinRadius, maxRadius * outward);
+                const fade = 1 - smoothstep(0, 1, depth);
+                for (let i = 0; i < FRACTAL.sampleCount; i++) drawFractalDot(values, age, i, baseRadius, fade, depth);
+            }
+
+            function drawFractalDot(values, age, sampleIndex, baseRadius, fade, depth) {
+                const t = sampleIndex / FRACTAL.sampleCount;
+                const amp = sampleFractalBand(values, t);
+                const laneIndex = Math.min(CONFIG.laneCount - 1, Math.floor(t * CONFIG.laneCount));
+                const lift = amp * FRACTAL.radialLift * (1 - depth * 0.35);
+                const radius = baseRadius + lift;
+                const x = centerX + fractalCos[sampleIndex] * radius;
+                const y = centerY + fractalSin[sampleIndex] * radius;
+                const sparkle = 0.82 + 0.18 * Math.sin(age * 0.004 + sampleIndex * 0.91 + amp * 11.7);
+                const glow = (0.02 + amp * 0.16) * fade * sparkle;
+                const color = laneFillStyles[laneIndex];
+                if (glow > 0.006) drawDot(x, y, CONFIG.dotRadius * FRACTAL.glowScale, color, glow);
+                drawDot(x, y, CONFIG.dotRadius * FRACTAL.coreScale, color, (0.08 + amp * 0.9) * fade);
+                if (depth < 0.06 && sampleIndex % 12 === 0) drawDot(centerX, centerY, CONFIG.dotRadius * 1.5, WHITE_FILL, fade * 0.12);
+            }
+
             function drawRow(rowIndex) {
                 const depth = rowAges[rowIndex] / CONFIG.travelMs;
                 if (depth <= 0 || depth >= 1) return;
@@ -566,6 +721,10 @@
             function rowY(depth) {
                 const t = Math.pow(depth, 1.75);
                 return mix(horizonY, bottomY, t);
+            }
+
+            function rowTravelT(depth) {
+                return Math.pow(depth, 1.75);
             }
 
             function drawHorizon() {
@@ -631,8 +790,23 @@
                 if (analyser) scheduleOverlayHide(3700);
             }
 
+            function shouldIgnoreSpaceToggle(event) {
+                const target = event.target;
+                if (!target || !(target instanceof HTMLElement)) return false;
+                if (target.closest('button')) return true;
+                if (target.isContentEditable) return true;
+                return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+            }
+
+            function handleKeydown(event) {
+                if (event.code !== 'Space' || event.repeat || shouldIgnoreSpaceToggle(event)) return;
+                event.preventDefault();
+                cycleViewMode();
+            }
+
             function updateButtons() {
                 toggleAudioBtn.textContent = analyser ? 'Stop' : 'Start mic';
+                toggleViewBtn.textContent = `View: ${currentViewMode().label}`;
                 fullscreenBtn.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
             }
 
@@ -650,15 +824,14 @@
                     buildBandMap();
                     audioPollClock = CONFIG.audioPollMs;
                     statsClock = CONFIG.statsMs;
-                    modeEl.textContent = 'Race';
                     updateButtons();
-                    setMessage('Live mode. The horizon captures one audio snapshot per second and sends each one down the dotted road.');
+                    updateHeroMessage();
                     setOverlayVisible(true);
                     scheduleOverlayHide();
                 } catch (error) {
                     console.error(error);
                     stopAudio();
-                    setMessage('Microphone access failed. Idle mode stays active with synthetic horizon snapshots.');
+                    setMessage('Microphone access failed. The selected view stays in idle mode with synthetic spectrum motion.');
                 }
             }
 
@@ -672,9 +845,8 @@
                 freqData = null;
                 bandMap = new Uint16Array(0);
                 audioPollClock = 0;
-                modeEl.textContent = 'Wake';
                 updateButtons();
-                setMessage('Idle mode. Synthetic horizon snapshots keep flowing toward you until the mic starts.');
+                updateHeroMessage();
                 setOverlayVisible(true);
             }
 
@@ -712,25 +884,35 @@
                 }
                 updateRows(dt, now);
                 clearFrame(now);
-                drawRows();
-                drawHorizon();
+                if (currentViewMode().id === 'road') {
+                    drawRows();
+                    drawHorizon();
+                } else {
+                    drawFractalScene(now);
+                }
                 drawScanlines();
                 drawVignette();
                 ctx.globalAlpha = 1;
             }
 
             toggleAudioBtn.addEventListener('click', () => toggleAudio().catch(console.error));
+            toggleViewBtn.addEventListener('click', cycleViewMode);
             fullscreenBtn.addEventListener('click', () => toggleFullscreen().catch(console.error));
             window.addEventListener('mousemove', revealOverlayTemporarily);
             window.addEventListener('pointerdown', revealOverlayTemporarily);
+            window.addEventListener('keydown', handleKeydown);
+            window.addEventListener('hashchange', handleHashChange);
             document.addEventListener('fullscreenchange', updateButtons);
             document.addEventListener('visibilitychange', handleVisibilityChange);
             window.addEventListener('resize', scheduleResize);
 
             applyResize();
+            applyViewModeFromHash();
             updateButtons();
+            updateModeLabel();
             setOverlayVisible(true);
             writeSnapshot(0);
+            updateHeroMessage();
             updateStats();
             requestAnimationFrame(frame);
         })();
