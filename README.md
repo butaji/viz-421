@@ -1,5 +1,7 @@
 # VIZ421
 
+![Dot Road spectrum preview](pics/p1.png)
+
 VIZ421 is a single-file Chrome music visualizer that turns live microphone input into a retro-futuristic dotted rainbow road. Each audio snapshot is captured at the horizon and then travels toward the viewer like a stylized arcade racing scene.
 
 ## What It Does
