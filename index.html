@@ -5,6 +5,18 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dot Road Audio Visualizer</title>
+    <meta name="description"
+        content="A browser-based music visualizer that turns live microphone input into a retro-futuristic dotted rainbow road." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Dot Road Audio Visualizer" />
+    <meta property="og:description"
+        content="A browser-based music visualizer that turns live microphone input into a retro-futuristic dotted rainbow road." />
+    <meta property="og:image" content="pics/p1.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Dot Road Audio Visualizer" />
+    <meta name="twitter:description"
+        content="A browser-based music visualizer that turns live microphone input into a retro-futuristic dotted rainbow road." />
+    <meta name="twitter:image" content="pics/p1.png" />
     <style>
         :root {
             color-scheme: dark;
@@ -205,12 +217,18 @@
                 nearWidth: 1.18,
                 bottomOverscan: 0.12,
                 sampleMs: 120,
+                audioPollMs: 50,
+                statsMs: 200,
                 travelMs: 12000,
                 dotRadius: 1.15,
                 horizonLift: 276,
                 starCount: 180,
                 scanlineAlpha: 0.028
             };
+
+            const MAX_ROWS = Math.ceil(CONFIG.travelMs / CONFIG.sampleMs) + 2;
+            const STAR_FILL = 'rgb(102,242,255)';
+            const WHITE_FILL = 'rgb(255,255,255)';
 
             const PALETTE = [
                 [0.14, 0.45, 1.0],
@@ -223,12 +241,27 @@
 
             const smoothed = new Float32Array(CONFIG.spectrumSize);
             const stars = [];
-            const rows = [];
+            const rowValues = Array.from({ length: MAX_ROWS }, () => new Float32Array(CONFIG.laneCount));
+            const rowAges = new Float32Array(MAX_ROWS);
+            const laneUs = new Float32Array(CONFIG.laneCount);
+            const laneCenters = new Float32Array(CONFIG.laneCount);
+            const laneSpectrumIndex = new Uint16Array(CONFIG.laneCount);
+            const midLaneCenters = new Float32Array(Math.max(0, CONFIG.laneCount - 1));
+            const laneFillStyles = new Array(CONFIG.laneCount);
+            const midLaneFillStyles = new Array(Math.max(0, CONFIG.laneCount - 1));
 
             let width = 0;
             let height = 0;
             let dpr = 1;
             let horizonY = 0;
+            let centerX = 0;
+            let horizonHalfWidth = 0;
+            let bottomY = 0;
+            let topFadeMinY = 0;
+            let topFadeMaxY = 0;
+            let backgroundGradient = null;
+            let vignetteGradient = null;
+            let scanlineCanvas = null;
             let audioContext = null;
             let analyser = null;
             let stream = null;
@@ -236,8 +269,13 @@
             let bandMap = new Uint16Array(0);
             let lastFrame = 0;
             let sampleClock = 0;
-            let overlayTimer = 0;
-            let hoverTimer = 0;
+            let audioPollClock = 0;
+            let statsClock = 0;
+            let overlayHideTimer = 0;
+            let resizeRaf = 0;
+            let rowHead = -1;
+            let rowCount = 0;
+            let isPageVisible = !document.hidden;
             let energy = 0;
             let punch = 0;
             let bass = 0;
@@ -272,28 +310,82 @@
                 return [mix(a[0], b[0], f), mix(a[1], b[1], f), mix(a[2], b[2], f)];
             }
 
-            function rgba(color, alpha) {
+            function rgb(color) {
                 const r = Math.round(color[0] * 255);
                 const g = Math.round(color[1] * 255);
                 const b = Math.round(color[2] * 255);
-                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                return `rgb(${r}, ${g}, ${b})`;
             }
 
             function laneU(i) {
                 return i / Math.max(1, CONFIG.laneCount - 1);
             }
 
-            function resize() {
-                dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 1.5));
-                width = window.innerWidth;
-                height = window.innerHeight;
+            function applyResize() {
+                const nextDpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 1.5));
+                const nextWidth = window.innerWidth;
+                const nextHeight = window.innerHeight;
+                if (nextDpr === dpr && nextWidth === width && nextHeight === height) return;
+                dpr = nextDpr;
+                width = nextWidth;
+                height = nextHeight;
                 canvas.width = Math.floor(width * dpr);
                 canvas.height = Math.floor(height * dpr);
                 canvas.style.width = `${width}px`;
                 canvas.style.height = `${height}px`;
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 horizonY = height * CONFIG.horizonY;
+                buildLaneTables();
+                buildRenderCaches();
                 initStars();
+            }
+
+            function scheduleResize() {
+                if (resizeRaf) return;
+                resizeRaf = window.requestAnimationFrame(() => {
+                    resizeRaf = 0;
+                    applyResize();
+                });
+            }
+
+            function buildLaneTables() {
+                for (let i = 0; i < CONFIG.laneCount; i++) {
+                    const u = laneU(i);
+                    laneUs[i] = u;
+                    laneCenters[i] = u * 2 - 1;
+                    laneSpectrumIndex[i] = Math.floor(u * (CONFIG.spectrumSize - 1));
+                    laneFillStyles[i] = rgb(palette(u));
+                    if (i < CONFIG.laneCount - 1) {
+                        const midU = (u + laneU(i + 1)) * 0.5;
+                        midLaneCenters[i] = midU * 2 - 1;
+                        midLaneFillStyles[i] = rgb(palette(midU));
+                    }
+                }
+            }
+
+            function buildRenderCaches() {
+                centerX = width * 0.5;
+                horizonHalfWidth = width * CONFIG.horizonWidth * 0.5;
+                bottomY = height * (1 + CONFIG.bottomOverscan);
+                topFadeMinY = 0.16 * height;
+                topFadeMaxY = 0.34 * height;
+
+                backgroundGradient = ctx.createLinearGradient(0, 0, 0, height);
+                backgroundGradient.addColorStop(0, '#0b1a34');
+                backgroundGradient.addColorStop(0.34, '#060b16');
+                backgroundGradient.addColorStop(0.58, '#020207');
+                backgroundGradient.addColorStop(1, '#000');
+
+                vignetteGradient = ctx.createRadialGradient(centerX, height * 0.58, width * 0.2, centerX, height * 0.58, width * 0.78);
+                vignetteGradient.addColorStop(0, 'rgba(0,0,0,0)');
+                vignetteGradient.addColorStop(1, 'rgba(0,0,0,0.46)');
+
+                scanlineCanvas = document.createElement('canvas');
+                scanlineCanvas.width = Math.max(1, width);
+                scanlineCanvas.height = Math.max(1, height);
+                const scanCtx = scanlineCanvas.getContext('2d');
+                scanCtx.fillStyle = `rgba(255,255,255,${CONFIG.scanlineAlpha})`;
+                for (let y = 0; y < height; y += 4) scanCtx.fillRect(0, y, width, 1);
             }
 
             function initStars() {
@@ -324,12 +416,24 @@
                 return clamp(bin, 0, freqData.length - 1);
             }
 
-            function updateSpectrum(now) {
-                if (analyser && freqData) analyser.getByteFrequencyData(freqData);
+            function updateSpectrum(dt, now) {
+                if (analyser && freqData) {
+                    audioPollClock += dt;
+                    if (audioPollClock >= CONFIG.audioPollMs) {
+                        audioPollClock %= CONFIG.audioPollMs;
+                        analyser.getByteFrequencyData(freqData);
+                        updateSmoothedSpectrum((i) => freqData[bandMap[i]] / 255);
+                    }
+                } else {
+                    updateSmoothedSpectrum((i) => idleBand(now, i / CONFIG.spectrumSize));
+                }
+            }
+
+            function updateSmoothedSpectrum(readBand) {
                 let peak = 0;
                 let peakIndex = 0;
                 for (let i = 0; i < CONFIG.spectrumSize; i++) {
-                    const raw = analyser ? freqData[bandMap[i]] / 255 : idleBand(now, i / CONFIG.spectrumSize);
+                    const raw = readBand(i);
                     const smooth = i < 24 ? 0.8 : i > 90 ? 0.6 : 0.7;
                     smoothed[i] = smoothed[i] * smooth + raw * (1 - smooth);
                     if (smoothed[i] > peak) {
@@ -338,7 +442,6 @@
                     }
                 }
                 dominantHz = 24 * Math.pow(17000 / 24, peakIndex / Math.max(1, CONFIG.spectrumSize - 1));
-                updateStats();
             }
 
             function idleBand(now, t) {
@@ -361,7 +464,6 @@
                 energyEl.textContent = energy.toFixed(2);
                 punchEl.textContent = punch.toFixed(2);
                 peakEl.textContent = `${Math.round(dominantHz)} Hz`;
-                modeEl.textContent = analyser ? 'Race' : 'Wake';
             }
 
             function average(lo, hi) {
@@ -378,76 +480,81 @@
                 sampleClock += dt;
                 while (sampleClock >= CONFIG.sampleMs) {
                     sampleClock -= CONFIG.sampleMs;
-                    rows.unshift(makeSnapshot(now));
+                    writeSnapshot(now);
                 }
-                rows.forEach((row) => {
-                    row.age += dt;
-                });
-                while (rows.length && rows[rows.length - 1].age > CONFIG.travelMs) rows.pop();
+                for (let i = 0; i < rowCount; i++) rowAges[rowIndexFromNewest(i)] += dt;
+                while (rowCount) {
+                    const oldestIndex = rowIndexFromNewest(rowCount - 1);
+                    if (rowAges[oldestIndex] <= CONFIG.travelMs) break;
+                    rowCount--;
+                }
             }
 
-            function makeSnapshot(now) {
-                const values = new Float32Array(CONFIG.laneCount);
-                for (let i = 0; i < CONFIG.laneCount; i++) values[i] = sampleLane(now, laneU(i));
-                return { values, age: 0 };
+            function rowIndexFromNewest(offset) {
+                return (rowHead - offset + MAX_ROWS) % MAX_ROWS;
             }
 
-            function sampleLane(now, u) {
-                if (!analyser) return idleBand(now, u);
-                return smoothed[Math.floor(u * (CONFIG.spectrumSize - 1))];
+            function writeSnapshot(now) {
+                rowHead = (rowHead + 1) % MAX_ROWS;
+                const values = rowValues[rowHead];
+                for (let i = 0; i < CONFIG.laneCount; i++) values[i] = sampleLane(now, i);
+                rowAges[rowHead] = 0;
+                rowCount = Math.min(MAX_ROWS, rowCount + 1);
             }
 
-            function clearFrame() {
-                const grad = ctx.createLinearGradient(0, 0, 0, height);
-                grad.addColorStop(0, '#0b1a34');
-                grad.addColorStop(0.34, '#060b16');
-                grad.addColorStop(0.58, '#020207');
-                grad.addColorStop(1, '#000');
-                ctx.fillStyle = grad;
+            function sampleLane(now, lane) {
+                if (!analyser) return idleBand(now, laneUs[lane]);
+                return smoothed[laneSpectrumIndex[lane]];
+            }
+
+            function clearFrame(now) {
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = backgroundGradient;
                 ctx.fillRect(0, 0, width, height);
-                drawStars();
+                drawStars(now);
             }
 
-            function drawStars() {
-                stars.forEach((star, i) => drawStar(star, i));
+            function drawStars(now) {
+                stars.forEach((star, i) => drawStar(star, i, now));
             }
 
-            function drawStar(star, i) {
-                const drift = (performance.now() * 0.006 * star.s) % (width + 80);
+            function drawStar(star, i, now) {
+                const drift = (now * 0.006 * star.s) % (width + 80);
                 const x = (star.x + drift) % (width + 80) - 40;
-                const twinkle = 0.7 + 0.3 * Math.sin(performance.now() * 0.001 + i);
-                drawDot(x, star.y, CONFIG.dotRadius, [0.4, 0.95, 1.0], star.a * twinkle);
+                const twinkle = 0.7 + 0.3 * Math.sin(now * 0.001 + i);
+                drawDot(x, star.y, CONFIG.dotRadius, STAR_FILL, star.a * twinkle);
             }
 
-            function drawDot(x, y, radius, color, alpha) {
+            function drawDot(x, y, radius, fillStyle, alpha) {
                 if (y <= radius * 2 || alpha <= 0) return;
-                ctx.fillStyle = rgba(color, alpha);
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = fillStyle;
                 ctx.beginPath();
                 ctx.arc(x, y, radius, 0, Math.PI * 2);
                 ctx.fill();
             }
 
             function drawRows() {
-                for (let i = rows.length - 1; i >= 0; i--) drawRow(rows[i]);
+                for (let i = rowCount - 1; i >= 0; i--) drawRow(rowIndexFromNewest(i));
             }
 
-            function drawRow(row) {
-                const depth = row.age / CONFIG.travelMs;
+            function drawRow(rowIndex) {
+                const depth = rowAges[rowIndex] / CONFIG.travelMs;
                 if (depth <= 0 || depth >= 1) return;
                 const widthNow = rowWidth(depth);
                 const y = rowY(depth);
-                for (let lane = 0; lane < CONFIG.laneCount; lane++) drawRowDot(row, lane, widthNow, y, depth);
+                const values = rowValues[rowIndex];
+                for (let lane = 0; lane < CONFIG.laneCount; lane++) drawRowDot(values, rowAges[rowIndex], lane, widthNow, y, depth);
             }
 
-            function drawRowDot(row, lane, widthNow, y, depth) {
-                const u = laneU(lane);
-                const x = width * 0.5 + (u * 2 - 1) * widthNow * 0.5;
-                const amp = row.values[lane];
+            function drawRowDot(values, age, lane, widthNow, y, depth) {
+                const x = centerX + laneCenters[lane] * widthNow * 0.5;
+                const amp = values[lane];
                 const lift = amp * CONFIG.horizonLift * (1 - depth);
                 const fade = 1 - smoothstep(0, 1, depth);
-                const sparkle = 0.82 + 0.18 * Math.sin(row.age * 0.004 + lane * 0.91 + amp * 11.7);
+                const sparkle = 0.82 + 0.18 * Math.sin(age * 0.004 + lane * 0.91 + amp * 11.7);
                 const glow = (0.02 + amp * 0.16) * fade * sparkle;
-                const color = palette(u);
+                const color = laneFillStyles[lane];
                 if (glow > 0.006) drawDot(x, y - lift, CONFIG.dotRadius * 3.8, color, glow);
                 drawDot(x, y - lift, CONFIG.dotRadius, color, (0.08 + amp * 0.9) * fade);
             }
@@ -458,55 +565,50 @@
 
             function rowY(depth) {
                 const t = Math.pow(depth, 1.75);
-                return mix(horizonY, height * (1 + CONFIG.bottomOverscan), t);
+                return mix(horizonY, bottomY, t);
             }
 
             function drawHorizon() {
-                const newest = rows[0];
-                if (!newest) return;
+                if (!rowCount) return;
+                const newest = rowValues[rowHead];
                 for (let lane = 0; lane < CONFIG.laneCount; lane++) drawHorizonDot(newest, lane);
                 for (let lane = 0; lane < CONFIG.laneCount - 1; lane++) drawHorizonMidDot(newest, lane);
             }
 
-            function drawHorizonDot(row, lane) {
-                const u = laneU(lane);
-                const x = width * 0.5 + (u * 2 - 1) * width * CONFIG.horizonWidth * 0.5;
-                const amp = row.values[lane];
+            function drawHorizonDot(values, lane) {
+                const x = centerX + laneCenters[lane] * horizonHalfWidth;
+                const amp = values[lane];
                 const jitter = (Math.sin(lane * 12.73 + amp * 19.1) * 0.5 + 0.5) * 10;
                 const y = horizonY - amp * CONFIG.horizonLift - jitter * smoothstep(0.02, 0.3, amp);
-                const topFade = smoothstep(0.16 * height, 0.34 * height, y);
-                const color = palette(u);
+                const topFade = smoothstep(topFadeMinY, topFadeMaxY, y);
+                const color = laneFillStyles[lane];
                 if (amp > 0.001 && topFade > 0.02) {
                     drawDot(x, y, CONFIG.dotRadius * 5, color, (0.08 + amp * 0.12) * topFade);
-                    drawDot(x, y, CONFIG.dotRadius * 1.9, [1, 1, 1], (0.08 + amp * 0.14) * topFade);
+                    drawDot(x, y, CONFIG.dotRadius * 1.9, WHITE_FILL, (0.08 + amp * 0.14) * topFade);
                 }
                 if (topFade > 0.02) drawDot(x, y, CONFIG.dotRadius, color, (0.32 + amp * 0.78) * topFade);
             }
 
-            function drawHorizonMidDot(row, lane) {
-                const u0 = laneU(lane);
-                const u1 = laneU(lane + 1);
-                const u = (u0 + u1) * 0.5;
-                const amp = (row.values[lane] + row.values[lane + 1]) * 0.5;
-                const x = width * 0.5 + (u * 2 - 1) * width * CONFIG.horizonWidth * 0.5;
+            function drawHorizonMidDot(values, lane) {
+                const amp = (values[lane] + values[lane + 1]) * 0.5;
+                const x = centerX + midLaneCenters[lane] * horizonHalfWidth;
                 const jitter = (Math.sin((lane + 0.5) * 10.91 + amp * 17.3) * 0.5 + 0.5) * 8;
                 const y = horizonY - amp * CONFIG.horizonLift - jitter * smoothstep(0.02, 0.3, amp);
-                const topFade = smoothstep(0.16 * height, 0.34 * height, y);
-                const color = palette(u);
+                const topFade = smoothstep(topFadeMinY, topFadeMaxY, y);
+                const color = midLaneFillStyles[lane];
                 if (amp <= 0.001 || topFade <= 0.02) return;
                 drawDot(x, y, CONFIG.dotRadius * 0.9, color, (0.24 + amp * 0.52) * topFade);
             }
 
             function drawScanlines() {
-                ctx.fillStyle = `rgba(255,255,255,${CONFIG.scanlineAlpha})`;
-                for (let y = 0; y < height; y += 4) ctx.fillRect(0, y, width, 1);
+                if (!scanlineCanvas) return;
+                ctx.globalAlpha = 1;
+                ctx.drawImage(scanlineCanvas, 0, 0);
             }
 
             function drawVignette() {
-                const grad = ctx.createRadialGradient(width * 0.5, height * 0.58, width * 0.2, width * 0.5, height * 0.58, width * 0.78);
-                grad.addColorStop(0, 'rgba(0,0,0,0)');
-                grad.addColorStop(1, 'rgba(0,0,0,0.46)');
-                ctx.fillStyle = grad;
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = vignetteGradient;
                 ctx.fillRect(0, 0, width, height);
             }
 
@@ -519,15 +621,14 @@
             }
 
             function scheduleOverlayHide(delay = 10000) {
-                clearTimeout(overlayTimer);
+                clearTimeout(overlayHideTimer);
                 if (!analyser) return;
-                overlayTimer = window.setTimeout(() => setOverlayVisible(false), delay);
+                overlayHideTimer = window.setTimeout(() => setOverlayVisible(false), delay);
             }
 
             function revealOverlayTemporarily() {
                 setOverlayVisible(true);
-                clearTimeout(hoverTimer);
-                hoverTimer = window.setTimeout(() => scheduleOverlayHide(2500), 1200);
+                if (analyser) scheduleOverlayHide(3700);
             }
 
             function updateButtons() {
@@ -547,6 +648,9 @@
                     source.connect(analyser);
                     freqData = new Uint8Array(analyser.frequencyBinCount);
                     buildBandMap();
+                    audioPollClock = CONFIG.audioPollMs;
+                    statsClock = CONFIG.statsMs;
+                    modeEl.textContent = 'Race';
                     updateButtons();
                     setMessage('Live mode. The horizon captures one audio snapshot per second and sends each one down the dotted road.');
                     setOverlayVisible(true);
@@ -559,8 +663,7 @@
             }
 
             function stopAudio() {
-                clearTimeout(overlayTimer);
-                clearTimeout(hoverTimer);
+                clearTimeout(overlayHideTimer);
                 if (stream) stream.getTracks().forEach((track) => track.stop());
                 if (audioContext) audioContext.close().catch(() => { });
                 audioContext = null;
@@ -568,9 +671,20 @@
                 stream = null;
                 freqData = null;
                 bandMap = new Uint16Array(0);
+                audioPollClock = 0;
+                modeEl.textContent = 'Wake';
                 updateButtons();
                 setMessage('Idle mode. Synthetic horizon snapshots keep flowing toward you until the mic starts.');
                 setOverlayVisible(true);
+            }
+
+            function handleVisibilityChange() {
+                isPageVisible = !document.hidden;
+                lastFrame = 0;
+                if (isPageVisible) {
+                    setOverlayVisible(true);
+                    if (analyser) scheduleOverlayHide(2500);
+                }
             }
 
             async function toggleAudio() {
@@ -589,13 +703,20 @@
                 if (!lastFrame) lastFrame = now;
                 const dt = Math.min(40, now - lastFrame);
                 lastFrame = now;
-                updateSpectrum(now);
+                if (!isPageVisible) return;
+                updateSpectrum(dt, now);
+                statsClock += dt;
+                if (statsClock >= CONFIG.statsMs) {
+                    statsClock %= CONFIG.statsMs;
+                    updateStats();
+                }
                 updateRows(dt, now);
-                clearFrame();
+                clearFrame(now);
                 drawRows();
                 drawHorizon();
                 drawScanlines();
                 drawVignette();
+                ctx.globalAlpha = 1;
             }
 
             toggleAudioBtn.addEventListener('click', () => toggleAudio().catch(console.error));
@@ -603,12 +724,14 @@
             window.addEventListener('mousemove', revealOverlayTemporarily);
             window.addEventListener('pointerdown', revealOverlayTemporarily);
             document.addEventListener('fullscreenchange', updateButtons);
-            window.addEventListener('resize', resize);
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            window.addEventListener('resize', scheduleResize);
 
-            resize();
+            applyResize();
             updateButtons();
             setOverlayVisible(true);
-            rows.unshift(makeSnapshot(0));
+            writeSnapshot(0);
+            updateStats();
             requestAnimationFrame(frame);
         })();
     </script>
