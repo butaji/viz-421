@@ -47,6 +47,7 @@ export function bootVisualizer() {
             let vignetteGradient = null;
             const backgroundAccent = new Float32Array([0.04, 0.08, 0.16]);
             let scanlineCanvas = null;
+            let keepAwakeMedia = null;
             let audioContext = null;
             let analyser = null;
             let stream = null;
@@ -77,6 +78,10 @@ export function bootVisualizer() {
             let activeSpectrumEnd = CONFIG.spectrumSize - 1;
             let devCapturedRowCount = 0;
             let lastDevCaptureLogAt = -Infinity;
+            function keepAwakeMediaSrc() {
+                return 'data:audio/wav;base64,UklGRmQGAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YUAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+            }
+
             function updateBackgroundAccent(values) {
                 const target = tintBackgroundColor(dominantSpectrumColor(values), CONFIG.backgroundTintStrength);
                 for (let i = 0; i < 3; i++) backgroundAccent[i] = mix(backgroundAccent[i], target[i], CONFIG.backgroundColorEase);
@@ -133,6 +138,62 @@ export function bootVisualizer() {
                 window.__vizCapturedRows = window.__vizCapturedRows || [];
                 window.__vizCapturedRows.push(row);
                 console.log('[viz-row-capture]', JSON.stringify(row));
+            }
+
+            function isAppleTabletDevice() {
+                const { userAgent = '', platform = '', maxTouchPoints = 0 } = navigator || {};
+                if (/iPad/i.test(userAgent) || /iPad/i.test(platform)) return true;
+                return /Mac/i.test(platform) && maxTouchPoints > 1;
+            }
+
+            function isFullscreenMode() {
+                if (document.fullscreenElement) return true;
+                if (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches) return true;
+                return Boolean(window.navigator && window.navigator.standalone);
+            }
+
+            function shouldRunKeepAwakeMedia() {
+                return !document.hidden && isAppleTabletDevice() && isFullscreenMode();
+            }
+
+            function ensureKeepAwakeMedia() {
+                if (keepAwakeMedia) return keepAwakeMedia;
+                const media = document.createElement('audio');
+                media.src = keepAwakeMediaSrc();
+                media.loop = true;
+                media.preload = 'auto';
+                media.volume = 0.001;
+                media.playsInline = true;
+                media.setAttribute('playsinline', '');
+                media.setAttribute('webkit-playsinline', '');
+                media.setAttribute('aria-hidden', 'true');
+                media.style.display = 'none';
+                document.body.appendChild(media);
+                keepAwakeMedia = media;
+                return media;
+            }
+
+            async function startKeepAwakeMedia() {
+                if (!shouldRunKeepAwakeMedia()) return;
+                const media = ensureKeepAwakeMedia();
+                if (!media.paused) return;
+                try {
+                    media.currentTime = 0;
+                    await media.play();
+                } catch (error) {
+                    console.debug('Keep-awake media could not start yet.', error);
+                }
+            }
+
+            function stopKeepAwakeMedia() {
+                if (!keepAwakeMedia) return;
+                keepAwakeMedia.pause();
+                keepAwakeMedia.currentTime = 0;
+            }
+
+            function syncKeepAwakeMedia() {
+                if (shouldRunKeepAwakeMedia()) startKeepAwakeMedia();
+                else stopKeepAwakeMedia();
             }
 
             function applyBandSensitivity(value, index) {
@@ -1157,10 +1218,16 @@ export function bootVisualizer() {
             function handleVisibilityChange() {
                 isPageVisible = !document.hidden;
                 lastFrame = 0;
+                syncKeepAwakeMedia();
                 if (isPageVisible) {
                     setOverlayVisible(true);
                     if (analyser) scheduleOverlayHide(2500);
                 }
+            }
+
+            function handlePointerDown() {
+                revealOverlayTemporarily();
+                syncKeepAwakeMedia();
             }
 
             async function toggleAudio() {
@@ -1171,6 +1238,7 @@ export function bootVisualizer() {
             async function toggleFullscreen() {
                 if (document.fullscreenElement) await document.exitFullscreen();
                 else await document.documentElement.requestFullscreen();
+                syncKeepAwakeMedia();
                 updateButtons();
             }
 
@@ -1199,10 +1267,13 @@ export function bootVisualizer() {
             toggleViewBtn.addEventListener('click', cycleViewMode);
             fullscreenBtn.addEventListener('click', () => toggleFullscreen().catch(console.error));
             window.addEventListener('mousemove', revealOverlayTemporarily);
-            window.addEventListener('pointerdown', revealOverlayTemporarily);
+            window.addEventListener('pointerdown', handlePointerDown);
             window.addEventListener('keydown', handleKeydown);
             window.addEventListener('hashchange', handleHashChange);
-            document.addEventListener('fullscreenchange', updateButtons);
+            document.addEventListener('fullscreenchange', () => {
+                syncKeepAwakeMedia();
+                updateButtons();
+            });
             document.addEventListener('visibilitychange', handleVisibilityChange);
             window.addEventListener('resize', scheduleResize);
 
@@ -1211,6 +1282,7 @@ export function bootVisualizer() {
             updateButtons();
             updateModeLabel();
             setOverlayVisible(true);
+            syncKeepAwakeMedia();
             writeSnapshot(0);
             updateHeroMessage();
             updateStats();

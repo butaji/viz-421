@@ -72,6 +72,57 @@ describe('visualizer core behavior', () => {
     expect(env.shouldLogDevCaptureStream(3000)).toBe(false)
   })
 
+  test('iPadOS detection treats touch Macs as Apple tablets', async () => {
+    const env = await loadVisualizerEnvironment(['isAppleTabletDevice'], [], {
+      navigator: {
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        platform: 'MacIntel',
+        maxTouchPoints: 5,
+      },
+    })
+    expect(env.isAppleTabletDevice()).toBe(true)
+  })
+
+  test('keep-awake media only runs for fullscreen Apple tablets while visible', async () => {
+    const env = await loadVisualizerEnvironment(['isAppleTabletDevice', 'isFullscreenMode', 'shouldRunKeepAwakeMedia'], [], {
+      navigator: {
+        userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        platform: 'iPad',
+        maxTouchPoints: 5,
+      },
+      document: {
+        fullscreenElement: {},
+        hidden: false,
+      },
+      window: {
+        matchMedia: () => ({ matches: false }),
+        navigator: { standalone: false },
+      },
+    })
+    expect(env.isFullscreenMode()).toBe(true)
+    expect(env.shouldRunKeepAwakeMedia()).toBe(true)
+  })
+
+  test('keep-awake media stays off outside fullscreen mode', async () => {
+    const env = await loadVisualizerEnvironment(['isAppleTabletDevice', 'isFullscreenMode', 'shouldRunKeepAwakeMedia'], [], {
+      navigator: {
+        userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        platform: 'iPad',
+        maxTouchPoints: 5,
+      },
+      document: {
+        fullscreenElement: null,
+        hidden: false,
+      },
+      window: {
+        matchMedia: () => ({ matches: false }),
+        navigator: { standalone: false },
+      },
+    })
+    expect(env.isFullscreenMode()).toBe(false)
+    expect(env.shouldRunKeepAwakeMedia()).toBe(false)
+  })
+
   test('palette interpolation and rgb output stay valid', async () => {
     const env = await loadVisualizerEnvironment(['clamp', 'mix', 'palette', 'rgb'], ['PALETTE'])
     const color = env.palette(0.5)

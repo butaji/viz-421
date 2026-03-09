@@ -64,6 +64,13 @@
 - [ ] Minimal fix: remove `Spacefall` from mode flow and strengthen `Sphere`/`Cube` projections so particles define those forms and pulse with music.
 - [ ] Verification: run full tests and the production build after the mode refinement.
 
+## Active Plan - iPad Fullscreen Keep-Awake
+
+- [x] Scope review: detect iPad and fullscreen-only sessions, then keep a tiny hidden looping media element alive without changing desktop or non-fullscreen behavior.
+- [x] Test first: add failing coverage for iPadOS tablet detection and fullscreen gating before implementation.
+- [x] Minimal fix: add a lightweight keep-awake media sync path in `src/runtime/core.js` that starts only for fullscreen iPad sessions and stops cleanly otherwise.
+- [x] Verification: run the relevant tests and production build, then record the implementation and verification notes.
+
 ## Active Plan - Production Idle Preview Recovery
 
 - [x] Scope review: restore the deployed idle preview by fixing the production inline runtime so mic-off animation still boots from the root `index.html`.
@@ -78,6 +85,7 @@
 ## Notes
 
 - Concerns touched: audio input, rendering, and performance.
+- Current concerns touched: fullscreen UX, iPad device detection, and low-overhead media playback.
 - Visual guardrails: preserve the same road framing, dot-only language, and horizon-to-viewer motion.
 - Performance guardrails: reuse typed arrays, avoid per-frame allocations, and keep lane sampling lightweight.
 
@@ -105,6 +113,9 @@
 - The visualizer now supports 5 total modes: `Road`, `Spacefall`, `Tunnel`, `Portal Rings`, and `Canyon`, all sharing the same spectrum history feed and dot-based render language.
 - The production build stays dependency-free at runtime because `scripts/build-prod.mjs` minifies `src/index.html` into a standalone root `index.html` and rewrites asset paths from `../pics/` to `pics/`.
 - Verification completed with `npm test`, `npm run build`, and a check that the generated `index.html` contains `bootVisualizer()` with no remaining `import {` tokens.
+- Added fullscreen keep-awake regression coverage for iPad detection, fullscreen gating, and the iPadOS `MacIntel` + touch-device case before wiring the runtime change.
+- `src/runtime/core.js` now creates a tiny hidden looping audio element on demand and only plays it while the app is visible, running on an Apple tablet, and in fullscreen mode, retrying on fullscreen and pointer interactions.
+- Verification completed with `npx vitest run tests/visualizer-core.test.mjs`, `npm test`, and `npm run build`.
 
 ## Previous Plan - Center-Out Road Variant
 
