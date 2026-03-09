@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import {
   buildOutputContainsProdPaths,
+  buildOutputInlinesRuntimeWithoutImports,
   loadVisualizerEnvironment,
 } from './helpers/extract-visualizer.mjs'
 import { capturedRows } from './fixtures/captured-rows.mjs'
@@ -402,6 +403,10 @@ describe('visualizer core behavior', () => {
 
   test('production build keeps asset paths rooted for ./index.html', { timeout: 15000 }, async () => {
     await expect(buildOutputContainsProdPaths()).resolves.toBe(true)
+  })
+
+  test('production build inlines runtime dependencies without module imports', { timeout: 15000 }, async () => {
+    await expect(buildOutputInlinesRuntimeWithoutImports()).resolves.toBe(true)
   })
 
   test('captured mic rows show the current left plateau and collapsed far-right tail', () => {

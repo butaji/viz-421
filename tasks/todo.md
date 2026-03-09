@@ -64,6 +64,13 @@
 - [ ] Minimal fix: remove `Spacefall` from mode flow and strengthen `Sphere`/`Cube` projections so particles define those forms and pulse with music.
 - [ ] Verification: run full tests and the production build after the mode refinement.
 
+## Active Plan - Production Idle Preview Recovery
+
+- [x] Scope review: restore the deployed idle preview by fixing the production inline runtime so mic-off animation still boots from the root `index.html`.
+- [x] Test first: add a failing regression test that the production build strips module imports before inlining runtime code.
+- [x] Minimal fix: inline the full runtime dependency chain in `scripts/build-prod.mjs` without changing the dev module workflow.
+- [x] Verification: run the relevant tests and production build, then record the implementation note.
+
 ## Current Constraint
 
 - Keep newly added or extracted functions short; target about 20 lines and avoid anything over 40 unless there is a strong reason.
@@ -92,10 +99,12 @@
 - `src/index.html` now derives a very subtle dark background tint from dominant spectrum colors and eases it slowly, which adds ASMR-style atmosphere without competing with the road.
 - Production docs were tightened to reflect the real `src/index.html` -> `./index.html` workflow, release checklist, browser/runtime expectations, and dev diagnostics, and a small render-loop cleanup replaced `stars.forEach()` with a plain loop.
 - Development runtime is now modular: `src/index.html` loads `src/main.js`, which boots `src/runtime/core.js`, while the production build still inlines the runtime back into the root `index.html`.
+- Added a production-build regression test to ensure the generated root `index.html` no longer ships ESM `import` statements inside the inline script.
+- `scripts/build-prod.mjs` now inlines the full runtime module chain (`config`, `math`, `color`, `core`, and `main`) so the deployed root file boots correctly and restores the mic-off preview.
 - Shared runtime constants and pure helpers are now extracted into `src/runtime/config.js`, `src/runtime/math.js`, and `src/runtime/color.js`, improving testability without changing the production artifact model.
 - The visualizer now supports 5 total modes: `Road`, `Spacefall`, `Tunnel`, `Portal Rings`, and `Canyon`, all sharing the same spectrum history feed and dot-based render language.
 - The production build stays dependency-free at runtime because `scripts/build-prod.mjs` minifies `src/index.html` into a standalone root `index.html` and rewrites asset paths from `../pics/` to `pics/`.
-- Verification completed with `npm test`, `npm run build`, and a Vite smoke check returning `HTTP/1.1 200 OK` from `http://127.0.0.1:8080/src/`.
+- Verification completed with `npm test`, `npm run build`, and a check that the generated `index.html` contains `bootVisualizer()` with no remaining `import {` tokens.
 
 ## Previous Plan - Center-Out Road Variant
 

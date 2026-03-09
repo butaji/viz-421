@@ -4,16 +4,22 @@ import { minify } from 'html-minifier-terser'
 
 const root = process.cwd()
 const sourcePath = path.join(root, 'src', 'index.html')
-const scriptPath = path.join(root, 'src', 'main.js')
-const corePath = path.join(root, 'src', 'runtime', 'core.js')
+const runtimePaths = [
+  path.join(root, 'src', 'runtime', 'config.js'),
+  path.join(root, 'src', 'runtime', 'math.js'),
+  path.join(root, 'src', 'runtime', 'color.js'),
+  path.join(root, 'src', 'runtime', 'core.js'),
+  path.join(root, 'src', 'main.js'),
+]
 const outputPath = path.join(root, 'index.html')
 
+function inlineModuleSource(source) {
+  return source.replace(/^import .*$/gm, '').replace(/export\s+/g, '').trim()
+}
+
 const html = await readFile(sourcePath, 'utf8')
-const script = await readFile(scriptPath, 'utf8')
-const core = await readFile(corePath, 'utf8')
-const inlineScript = script.includes("from './runtime/core.js'")
-  ? `${core.replace('export function bootVisualizer()', 'function bootVisualizer()')}\nbootVisualizer()\n`
-  : script
+const runtimeParts = await Promise.all(runtimePaths.map((filePath) => readFile(filePath, 'utf8')))
+const inlineScript = runtimeParts.map(inlineModuleSource).join('\n\n')
 const htmlForProd = html
   .replace('<script type="module" src="./main.js"></script>', `<script>\n${inlineScript}\n</script>`)
   .replace(/\.\.\/pics\//g, 'pics/')

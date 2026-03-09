@@ -87,3 +87,9 @@ export async function buildOutputContainsProdPaths() {
   const html = await readFile(prodPath, 'utf8')
   return html.includes('pics/p1.png') && !html.includes('../pics/') && !html.includes('type="module" src="./main.js"')
 }
+
+export async function buildOutputInlinesRuntimeWithoutImports() {
+  await execFileAsync('node', ['scripts/build-prod.mjs'], { cwd: root })
+  const html = await readFile(prodPath, 'utf8')
+  return html.includes('function bootVisualizer()') && !html.includes('import {') && !html.includes(' from "./runtime/') && !html.includes(" from './runtime/")
+}
