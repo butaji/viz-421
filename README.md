@@ -2,7 +2,7 @@
 
 ![Dot Road spectrum preview](pics/p1.png)
 
-VIZ421 is a single-file Chrome music visualizer that turns live microphone input into a retro-futuristic dotted rainbow road. Each audio snapshot is captured at the horizon and then travels toward the viewer like a stylized arcade racing scene.
+VIZ421 is a browser-based microphone visualizer that turns live audio into a retro-futuristic dotted rainbow road. Development happens in `src/index.html`; the production artifact is the generated root `index.html`.
 
 ## What It Does
 
@@ -34,31 +34,55 @@ This project renders a TRON-meets-Rad-Racer visualizer using only native browser
 
 Microphone access is unreliable on `file://`, so run the page from a local server.
 
-### Simple Python server
+### Install dependencies
 
 ```bash
-python3 -m http.server 8080
+npm install
+```
+
+### Hot reload during development
+
+```bash
+npm run dev
 ```
 
 Open:
 
 ```text
-http://localhost:8080
+http://127.0.0.1:8080/src/
 ```
 
-### Live reload during development
+Vite reloads the browser automatically when `src/index.html` changes.
+
+### Run the test suite
 
 ```bash
-npx live-server --port=8080
+npm test
 ```
+
+Vitest covers syntax, spectrum mapping, projection behavior, slow adaptation, room-noise suppression, and production build path checks.
+
+### Preview the production build locally
+
+```bash
+npm run preview
+```
+
+### Build for production
+
+```bash
+npm run build
+```
+
+This writes a single production `./index.html` with no runtime dependencies. Edit `./src/index.html` during development.
 
 ## How To Use
 
-1. Open the app in Chrome or another modern browser
-2. Click `Start mic`
+1. Open the app in Chrome or another modern secure-context browser
+2. Click `Start`
 3. Allow microphone access
 4. Speak or play audio near the microphone
-5. Use the same button again to stop the mic
+5. Use `Stop` to release the mic
 6. Use `Fullscreen` for the cleanest presentation
 
 The control overlay auto-hides after mic start and reappears when you move the mouse.
@@ -70,6 +94,9 @@ The control overlay auto-hides after mic start and reappears when you move the m
 ├── index.html
 ├── README.md
 ├── AGENTS.md
+├── src/
+├── scripts/
+├── tests/
 └── tasks/
     ├── todo.md
     └── lessons.md
@@ -77,17 +104,36 @@ The control overlay auto-hides after mic start and reappears when you move the m
 
 ## Notes
 
-- The entire app lives in `index.html`
+- The editable app source lives in `src/index.html`
+- `index.html` is the generated production file in `./`
 - No external dependencies, no CDN assets, no frameworks
-- Snapshot cadence, perspective, glow, and color behavior are easy to tweak from the config block in `index.html`
+- Snapshot cadence, perspective, glow, and color behavior are easy to tweak from the config block in `src/index.html`
 - The visualizer is currently tuned around Chrome behavior first
 
 ## Production Notes
 
 - Host over `http://localhost` in development and HTTPS in production for reliable mic permissions
+- Production deployment is `index.html`; keep `pics/` if you want social preview metadata images to resolve
+- `file://` is not a supported production path for microphone use
+- The visualizer is tuned and tested primarily on Chrome/Chromium-class browsers
+- Use Node 20+ and a current npm for the documented dev/test/build workflow
 - Keep the file single-page and lightweight unless there is a strong reason to split it
 - If visual changes drift away from the road/snapshot concept, re-check the horizon sampling model before adding more effects
 
+## Developer Diagnostics
+
+- Capture a few rows in the browser console: `http://127.0.0.1:8080/src/?captureRows=1`
+- Stream rows every 5 seconds in the browser console: `http://127.0.0.1:8080/src/?captureRows=stream`
+- Captured rows are also stored on `window.__vizCapturedRows`
+
+## Release Checklist
+
+- Run `npm test`
+- Run `npm run build`
+- Serve the built app over HTTPS
+- Verify mic permission flow, start/stop, fullscreen, and overlay readability
+- Verify desktop and mobile sizing plus idle behavior with mic off
+
 ## License
 
-Add your preferred license here.
+Private project; add a license before public redistribution.

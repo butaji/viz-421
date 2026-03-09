@@ -1,0 +1,1368 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dot Road Audio Visualizer</title>
+    <meta name="description"
+        content="A browser-based music visualizer that turns live microphone input into a retro-futuristic dotted rainbow road." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Dot Road Audio Visualizer" />
+    <meta property="og:description"
+        content="A browser-based music visualizer that turns live microphone input into a retro-futuristic dotted rainbow road." />
+    <meta property="og:image" content="../pics/p1.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Dot Road Audio Visualizer" />
+    <meta name="twitter:description"
+        content="A browser-based music visualizer that turns live microphone input into a retro-futuristic dotted rainbow road." />
+    <meta name="twitter:image" content="../pics/p1.png" />
+    <style>
+        :root {
+            color-scheme: dark;
+            background: #01030a;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background: #01030a;
+        }
+
+        body {
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 50% 18%, #11284f 0%, #050a16 28%, #01030a 68%);
+        }
+
+        #ui {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 24px;
+            padding: 22px;
+            pointer-events: none;
+            z-index: 2;
+            opacity: 1;
+            transition: opacity 500ms ease;
+        }
+
+        #ui.hidden {
+            opacity: 0;
+        }
+
+        #ui.hidden .panel {
+            pointer-events: none;
+        }
+
+        .panel {
+            pointer-events: auto;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 28px;
+            background: rgba(2, 6, 22, 0.74);
+            box-shadow: inset 0 0 0 1px rgba(94, 170, 255, 0.04), 0 24px 70px rgba(0, 0, 0, 0.42);
+            backdrop-filter: blur(16px) saturate(145%);
+        }
+
+        .hero {
+            max-width: min(620px, calc(100vw - 44px));
+            padding: 22px;
+        }
+
+        .eyebrow {
+            display: inline-block;
+            margin-bottom: 10px;
+            color: #53f6ff;
+            font-size: 12px;
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        h1 {
+            margin: 0 0 14px;
+            color: #f7f8ff;
+            font-size: clamp(44px, 7vw, 82px);
+            line-height: 0.9;
+            letter-spacing: -0.06em;
+            max-width: 10ch;
+        }
+
+        p {
+            margin: 0;
+            max-width: 30ch;
+            color: rgba(245, 246, 251, 0.76);
+            font-size: 15px;
+            line-height: 1.45;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 22px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            appearance: none;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+            color: #eef2ff;
+            font: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            padding: 15px 22px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+
+        .stats {
+            min-width: 270px;
+            padding: 18px 22px;
+            display: grid;
+            gap: 18px;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            color: rgba(245, 246, 251, 0.62);
+            font-size: 12px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .stat strong {
+            color: #f7f8ff;
+            font-size: 14px;
+            letter-spacing: 0.14em;
+        }
+
+        @media (max-width: 860px) {
+            #ui {
+                flex-direction: column;
+            }
+
+            .stats {
+                min-width: 0;
+                width: min(100%, 360px);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="ui">
+        <div class="panel hero">
+            <span class="eyebrow">Cosmic Audio Reactor</span>
+            <h1>Dot road spectrum</h1>
+            <p id="msg">Start the microphone to capture the live horizon spectrum and send each one-second snapshot down the rainbow road.</p>
+            <div class="controls">
+                <button id="toggle-audio">Start mic</button>
+                <button id="toggle-view">View: Road</button>
+                <button id="fullscreen">Fullscreen</button>
+            </div>
+        </div>
+        <div class="panel stats">
+            <div class="stat"><span>Energy</span><strong id="energy">0.00</strong></div>
+            <div class="stat"><span>Punch</span><strong id="punch">0.00</strong></div>
+            <div class="stat"><span>Peak</span><strong id="peak">0 Hz</strong></div>
+            <div class="stat"><span>View</span><strong id="mode">Road</strong></div>
+        </div>
+    </div>
+    <canvas id="scene"></canvas>
+
+    <script>
+        (() => {
+            const canvas = document.getElementById('scene');
+            const ctx = canvas.getContext('2d');
+            const ui = document.getElementById('ui');
+            const toggleAudioBtn = document.getElementById('toggle-audio');
+            const toggleViewBtn = document.getElementById('toggle-view');
+            const fullscreenBtn = document.getElementById('fullscreen');
+            const msg = document.getElementById('msg');
+            const energyEl = document.getElementById('energy');
+            const punchEl = document.getElementById('punch');
+            const peakEl = document.getElementById('peak');
+            const modeEl = document.getElementById('mode');
+
+            const CONFIG = {
+                fftSize: 4096,
+                spectrumSize: 120,
+                spectrumCurve: 0.84,
+                spectrumLift: 1.85,
+                sensitivityFloor: 0.035,
+                sensitivityBlend: 0.74,
+                sensitivityRightBoost: 0.22,
+                sensitivityGamma: 0.88,
+                sensitivityCeilingAttack: 0.014,
+                sensitivityCeilingRelease: 0.0016,
+                sensitivityFloorAttack: 0.006,
+                sensitivityFloorRelease: 0.0012,
+                fluxBlend: 0.14,
+                anchorRadius: 2,
+                activeRangeThreshold: 0.08,
+                activeRangePadding: 2,
+                activeRangeEase: 0.045,
+                activeRangeMinSpan: 56,
+                staleFluxThreshold: 0.0025,
+                staleAttack: 0.018,
+                staleRelease: 0.01,
+                staleMaxDamping: 0.34,
+                noiseFluxThreshold: 0.06,
+                noiseFloorRise: 0.12,
+                noiseFloorFall: 0.01,
+                noiseFloorStrength: 0.78,
+                backgroundColorEase: 0.028,
+                backgroundTintStrength: 0.16,
+                lowBandEnd: 0.38,
+                midBandCenter: 0.58,
+                highBandStart: 0.62,
+                devCaptureRows: 6,
+                devCaptureStreamMs: 5000,
+                laneCount: 120,
+                rowCount: 22,
+                horizonY: 0.58,
+                horizonWidth: 1.0,
+                nearWidth: 1.18,
+                bottomOverscan: 0.12,
+                sampleMs: 120,
+                audioPollMs: 50,
+                statsMs: 200,
+                travelMs: 12000,
+                dotRadius: 1.15,
+                horizonLift: 276,
+                starCount: 180,
+                scanlineAlpha: 0.028
+            };
+
+            const VIEW_MODES = [
+                { id: 'road', label: 'Road' },
+                { id: 'spacefall', label: 'Spacefall' }
+            ];
+
+            const FRACTAL = {
+                sampleCount: 72,
+                shellMinRadius: 0,
+                shellMaxRadiusFactor: 1.02,
+                radialLift: 120,
+                minAlpha: 0.025,
+                glowScale: 3.4,
+                coreScale: 1.2
+            };
+
+            const MAX_ROWS = Math.ceil(CONFIG.travelMs / CONFIG.sampleMs) + 2;
+            const STAR_FILL = 'rgb(102,242,255)';
+            const WHITE_FILL = 'rgb(255,255,255)';
+
+            const PALETTE = [
+                [0.14, 0.45, 1.0],
+                [0.00, 0.95, 1.0],
+                [0.12, 0.98, 0.78],
+                [0.98, 0.98, 0.26],
+                [1.00, 0.48, 0.18],
+                [1.00, 0.18, 0.72]
+            ];
+
+            const smoothed = new Float32Array(CONFIG.spectrumSize);
+            const bandFlux = new Float32Array(CONFIG.spectrumSize);
+            const bandStaleness = new Float32Array(CONFIG.spectrumSize);
+            const bandNoiseFloor = new Float32Array(CONFIG.spectrumSize);
+            const projectedSpectrum = new Float32Array(CONFIG.laneCount);
+            const projectedSpectrumFloor = new Float32Array(CONFIG.laneCount);
+            const stars = [];
+            const rowValues = Array.from({ length: MAX_ROWS }, () => new Float32Array(CONFIG.laneCount));
+            const rowAges = new Float32Array(MAX_ROWS);
+            const laneUs = new Float32Array(CONFIG.laneCount);
+            const laneCenters = new Float32Array(CONFIG.laneCount);
+            const laneSpectrumIndex = new Uint16Array(CONFIG.laneCount);
+            const midLaneCenters = new Float32Array(Math.max(0, CONFIG.laneCount - 1));
+            const laneFillStyles = new Array(CONFIG.laneCount);
+            const midLaneFillStyles = new Array(Math.max(0, CONFIG.laneCount - 1));
+            const fractalCos = new Float32Array(FRACTAL.sampleCount);
+            const fractalSin = new Float32Array(FRACTAL.sampleCount);
+
+            let width = 0;
+            let height = 0;
+            let dpr = 1;
+            let horizonY = 0;
+            let centerX = 0;
+            let centerY = 0;
+            let horizonHalfWidth = 0;
+            let bottomY = 0;
+            let topFadeMinY = 0;
+            let topFadeMaxY = 0;
+            let backgroundGradient = null;
+            let vignetteGradient = null;
+            const backgroundAccent = new Float32Array([0.04, 0.08, 0.16]);
+            let scanlineCanvas = null;
+            let audioContext = null;
+            let analyser = null;
+            let stream = null;
+            let freqData = null;
+            let bandStarts = new Uint16Array(0);
+            let bandEnds = new Uint16Array(0);
+            let lastFrame = 0;
+            let sampleClock = 0;
+            let audioPollClock = 0;
+            let statsClock = 0;
+            let overlayHideTimer = 0;
+            let resizeRaf = 0;
+            let rowHead = -1;
+            let rowCount = 0;
+            let isPageVisible = !document.hidden;
+            let viewModeIndex = 0;
+            let energy = 0;
+            let punch = 0;
+            let bass = 0;
+            let dominantHz = 0;
+            let lowBandFloor = 0.06;
+            let lowBandCeiling = 0.24;
+            let midBandFloor = 0.045;
+            let midBandCeiling = 0.18;
+            let highBandFloor = 0.035;
+            let highBandCeiling = 0.14;
+            let activeSpectrumStart = 0;
+            let activeSpectrumEnd = CONFIG.spectrumSize - 1;
+            let devCapturedRowCount = 0;
+            let lastDevCaptureLogAt = -Infinity;
+
+            function clamp(v, lo, hi) {
+                return Math.max(lo, Math.min(hi, v));
+            }
+
+            function mix(a, b, t) {
+                return a + (b - a) * t;
+            }
+
+            function smoothstep(a, b, x) {
+                const t = clamp((x - a) / (b - a), 0, 1);
+                return t * t * (3 - 2 * t);
+            }
+
+            function wrappedPeak(t, center, width) {
+                const delta = Math.abs(t - center);
+                const distance = Math.min(delta, 1 - delta);
+                const peak = clamp(1 - distance / width, 0, 1);
+                return peak * peak;
+            }
+
+            function palette(u) {
+                const x = clamp(u, 0, 0.9999) * (PALETTE.length - 1);
+                const i = Math.floor(x);
+                const f = x - i;
+                const a = PALETTE[i];
+                const b = PALETTE[Math.min(i + 1, PALETTE.length - 1)];
+                return [mix(a[0], b[0], f), mix(a[1], b[1], f), mix(a[2], b[2], f)];
+            }
+
+            function rgb(color) {
+                const r = Math.round(color[0] * 255);
+                const g = Math.round(color[1] * 255);
+                const b = Math.round(color[2] * 255);
+                return `rgb(${r}, ${g}, ${b})`;
+            }
+
+            function mixColor(a, b, t) {
+                return [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+            }
+
+            function dominantSpectrumColor(values) {
+                let total = 0;
+                const color = [0, 0, 0];
+                for (let i = 0; i < values.length; i++) {
+                    const weight = values[i] * values[i];
+                    if (weight <= 0) continue;
+                    const sample = palette(i / Math.max(1, values.length - 1));
+                    color[0] += sample[0] * weight;
+                    color[1] += sample[1] * weight;
+                    color[2] += sample[2] * weight;
+                    total += weight;
+                }
+                if (!total) return [0.14, 0.24, 0.42];
+                return [color[0] / total, color[1] / total, color[2] / total];
+            }
+
+            function tintBackgroundColor(color, strength) {
+                const base = [0.01, 0.02, 0.05];
+                const tint = [color[0] * 0.18, color[1] * 0.18, color[2] * 0.22];
+                return mixColor(base, tint, strength);
+            }
+
+            function updateBackgroundAccent(values) {
+                const target = tintBackgroundColor(dominantSpectrumColor(values), CONFIG.backgroundTintStrength);
+                for (let i = 0; i < 3; i++) backgroundAccent[i] = mix(backgroundAccent[i], target[i], CONFIG.backgroundColorEase);
+                rebuildBackgroundGradients();
+            }
+
+            function shapeBandLevel(avg, peak, t) {
+                const detail = mix(avg, peak, 0.2 + 0.45 * t);
+                const lifted = Math.pow(detail, 0.86);
+                const gain = mix(1, CONFIG.spectrumLift, Math.pow(t, 1.18));
+                return clamp(lifted * gain, 0, 1);
+            }
+
+            function devCaptureMode() {
+                const { hostname = '', search = '', hash = '' } = window.location || {};
+                const isLocal = hostname === '127.0.0.1' || hostname === 'localhost';
+                if (!isLocal) return 'off';
+                const flags = `${search}${hash}`;
+                if (/captureRows=stream|capture=stream/.test(flags)) return 'stream';
+                if (/captureRows=1|capture=1|captureRows|capture/.test(flags)) return 'sample';
+                return 'off';
+            }
+
+            function shouldCaptureDevRows() {
+                return devCaptureMode() !== 'off';
+            }
+
+            function shouldLogDevCaptureStream(now) {
+                if (now - lastDevCaptureLogAt < CONFIG.devCaptureStreamMs) return false;
+                lastDevCaptureLogAt = now;
+                return true;
+            }
+
+            function formatCapturedRow(values, label = 'row') {
+                const every = Math.max(1, Math.floor(values.length / 32));
+                const sample32 = [];
+                for (let i = 0; i < values.length && sample32.length < 32; i += every) {
+                    sample32.push(Number(values[i].toFixed(4)));
+                }
+                return {
+                    label,
+                    values: Array.from(values, (value) => Number(value.toFixed(6))),
+                    sample32,
+                };
+            }
+
+            function maybeCaptureDevRow(values, now) {
+                const mode = devCaptureMode();
+                if (mode === 'off' || !analyser) return;
+                if (mode === 'stream' && !shouldLogDevCaptureStream(now)) return;
+                if (mode !== 'stream' && devCapturedRowCount >= CONFIG.devCaptureRows) return;
+                const row = formatCapturedRow(values, `row-${devCapturedRowCount + 1}`);
+                devCapturedRowCount++;
+                window.__vizCapturedRows = window.__vizCapturedRows || [];
+                window.__vizCapturedRows.push(row);
+                console.log('[viz-row-capture]', JSON.stringify(row));
+            }
+
+            function applyBandSensitivity(value, index) {
+                const localNoiseFloor = typeof noiseFloorFor === 'function' ? noiseFloorFor(index) : 0;
+                const filtered = Math.max(0, value - localNoiseFloor);
+                const t = index / Math.max(1, CONFIG.spectrumSize - 1);
+                const floor = spectrumFloorFor(t);
+                const ceiling = spectrumCeilingFor(t);
+                const edgeWeight = Math.pow(Math.abs(t - 0.5) * 2, 0.78);
+                const rightTailFloor = mix(1, 0.24, smoothstep(0.72, 0.98, t));
+                const adjustedFloor = floor * mix(1, 0.08, edgeWeight) * rightTailFloor;
+                const span = Math.max(0.032, ceiling - adjustedFloor);
+                const normalized = Math.pow(clamp((filtered - adjustedFloor) / span, 0, 1), CONFIG.sensitivityGamma);
+                const bodyBoost = 0.56 * smoothstep(0.12, 0.34, t) * (1 - smoothstep(0.34, 0.62, t));
+                const tailBoost = 0.58 * smoothstep(0.72, 0.98, t);
+                const boosted = clamp(normalized * (1 + bodyBoost + tailBoost), 0, 1);
+                const edgeBoost = 0.08 * smoothstep(0.42, 1, edgeWeight);
+                const leftBoost = 0.08 * smoothstep(0.56, 0.95, 1 - t);
+                const rightBoost = CONFIG.sensitivityRightBoost * smoothstep(0.6, 0.98, t) + 0.12 * smoothstep(0.78, 0.99, t);
+                const blend = CONFIG.sensitivityBlend + edgeBoost + leftBoost + rightBoost;
+                const scaled = mix(filtered, boosted, blend) * stalenessDampingFor(index);
+                return clamp(scaled, 0, 1);
+            }
+
+            function updateBandNoiseFloor() {
+                for (let i = 0; i < CONFIG.spectrumSize; i++) {
+                    const steadiness = 1 - clamp(bandFlux[i] / CONFIG.noiseFluxThreshold, 0, 1);
+                    const target = smoothed[i] * CONFIG.noiseFloorStrength * steadiness;
+                    const rate = target > bandNoiseFloor[i] ? CONFIG.noiseFloorRise : CONFIG.noiseFloorFall;
+                    bandNoiseFloor[i] = mix(bandNoiseFloor[i], target, rate);
+                }
+            }
+
+            function noiseFloorFor(index) {
+                return bandNoiseFloor[index];
+            }
+
+            function updateBandStaleness() {
+                for (let i = 0; i < CONFIG.spectrumSize; i++) {
+                    const target = bandFlux[i] < CONFIG.staleFluxThreshold ? 1 : 0;
+                    const rate = target ? CONFIG.staleAttack : CONFIG.staleRelease;
+                    bandStaleness[i] = mix(bandStaleness[i], target, rate);
+                }
+            }
+
+            function stalenessDampingFor(index) {
+                return 1 - bandStaleness[index] * CONFIG.staleMaxDamping;
+            }
+
+            function sampleSpectrumValue(values, position) {
+                const lo = clamp(Math.floor(position), 0, values.length - 1);
+                const hi = clamp(lo + 1, 0, values.length - 1);
+                const blend = clamp(position - lo, 0, 1);
+                return mix(values[lo], values[hi], blend);
+            }
+
+            function sampleProjectedSpectrum(values, t) {
+                const center = t * (values.length - 1);
+                const radius = 1.2 + smoothstep(0.68, 1, t) * 14;
+                const lookAhead = smoothstep(0.7, 1, t) * radius;
+                let total = 0;
+                let weightTotal = 0;
+                let peak = 0;
+                for (let offset = -Math.ceil(radius); offset <= Math.ceil(radius); offset++) {
+                    const position = center + offset + lookAhead;
+                    const distance = Math.abs(offset) / radius;
+                    const forwardBias = offset > 0 ? 1.3 : 0.78;
+                    const weight = Math.max(0, 1 - distance * distance) * forwardBias;
+                    if (!weight) continue;
+                    const sample = sampleSpectrumValue(values, position);
+                    total += sample * weight;
+                    weightTotal += weight;
+                    peak = Math.max(peak, sample);
+                }
+                const average = total / Math.max(0.0001, weightTotal);
+                const tailPeakBlend = smoothstep(0.76, 1, t) * 0.48;
+                return mix(average, peak, tailPeakBlend);
+            }
+
+            function projectSpectrumRow(values) {
+                const output = typeof projectedSpectrum !== 'undefined'
+                    ? projectedSpectrum
+                    : new Float32Array(CONFIG.laneCount);
+                for (let i = 0; i < CONFIG.laneCount; i++) {
+                    const t = i / Math.max(1, CONFIG.laneCount - 1);
+                    output[i] = applyBandSensitivity(sampleProjectedSpectrum(values, t), Math.round(t * (CONFIG.spectrumSize - 1)));
+                }
+                applyProjectionFloor(output);
+                return output;
+            }
+
+            function applyProjectionFloor(values) {
+                const floorBuffer = typeof projectedSpectrumFloor !== 'undefined'
+                    ? projectedSpectrumFloor
+                    : new Float32Array(CONFIG.laneCount);
+                let rowPeak = 0;
+                for (let i = 0; i < CONFIG.laneCount; i++) rowPeak = Math.max(rowPeak, values[i]);
+                const quietBridge = 1 - smoothstep(0.08, 0.32, rowPeak);
+                for (let i = 0; i < CONFIG.laneCount; i++) {
+                    const t = i / Math.max(1, CONFIG.laneCount - 1);
+                    const radius = Math.round(mix(4, 9, Math.pow(Math.abs(t - 0.5) * 2, 0.85)));
+                    let total = 0;
+                    let weightTotal = 0;
+                    let peak = 0;
+                    for (let offset = -radius; offset <= radius; offset++) {
+                        const index = clamp(i + offset, 0, CONFIG.laneCount - 1);
+                        const distance = Math.abs(offset) / Math.max(1, radius);
+                        const weight = Math.max(0, 1 - distance * distance);
+                        const sample = values[index];
+                        total += sample * weight;
+                        weightTotal += weight;
+                        peak = Math.max(peak, sample);
+                    }
+                    const average = total / Math.max(0.0001, weightTotal);
+                    const edgeStrength = Math.pow(Math.abs(t - 0.5) * 2, 0.75);
+                    const leftEdgeBoost = 0.05 * smoothstep(0.5, 1, 1 - t);
+                    const rightEdgeBoost = 0.08 * smoothstep(0.72, 1, t);
+                    const floorMix = mix(0.17, 0.31, edgeStrength) + leftEdgeBoost + rightEdgeBoost;
+                    const localFloor = mix(average, peak, 0.45) * floorMix;
+                    const globalBridge = rowPeak * edgeStrength * quietBridge * 0.42;
+                    floorBuffer[i] = Math.max(values[i], localFloor, globalBridge);
+                }
+                let carry = 0;
+                for (let i = 0; i < CONFIG.laneCount; i++) {
+                    const t = i / Math.max(1, CONFIG.laneCount - 1);
+                    const edgeCarry = smoothstep(0.72, 1, t) * 0.38;
+                    carry = Math.max(floorBuffer[i], carry * 0.965);
+                    floorBuffer[i] = Math.max(floorBuffer[i], carry * edgeCarry);
+                }
+                carry = 0;
+                for (let i = CONFIG.laneCount - 1; i >= 0; i--) {
+                    const t = i / Math.max(1, CONFIG.laneCount - 1);
+                    const edgeCarry = smoothstep(0.72, 1, 1 - t) * 0.3;
+                    carry = Math.max(floorBuffer[i], carry * 0.965);
+                    floorBuffer[i] = Math.max(floorBuffer[i], carry * edgeCarry);
+                }
+                values.set(floorBuffer);
+            }
+
+            function remapSpectrumRow(values, start, end, count) {
+                const output = new Float32Array(count);
+                for (let i = 0; i < count; i++) {
+                    const t = i / Math.max(1, count - 1);
+                    output[i] = sampleSpectrumValue(values, mix(start, end, t));
+                }
+                return output;
+            }
+
+            function findActiveSpectrumBounds(values) {
+                const lastIndex = values.length - 1;
+                let peak = 0;
+                for (let i = 0; i < values.length; i++) peak = Math.max(peak, values[i]);
+                if (peak <= CONFIG.sensitivityFloor * 3) return [0, lastIndex];
+                const threshold = Math.max(CONFIG.sensitivityFloor, peak * CONFIG.activeRangeThreshold);
+                let start = 0;
+                let end = lastIndex;
+                while (start < values.length - 1 && values[start] < threshold) start++;
+                while (end > start && values[end] < threshold) end--;
+                start = Math.max(0, start - CONFIG.activeRangePadding);
+                end = Math.min(lastIndex, end + CONFIG.activeRangePadding);
+                const span = end - start;
+                if (span < CONFIG.activeRangeMinSpan) {
+                    const half = CONFIG.activeRangeMinSpan * 0.5;
+                    const center = (start + end) * 0.5;
+                    start = Math.max(0, Math.round(center - half));
+                    end = Math.min(lastIndex, Math.round(center + half));
+                }
+                return [0, Math.max(end, lastIndex)];
+            }
+
+            function updateActiveSpectrumRange(values) {
+                const [targetStart, targetEnd] = findActiveSpectrumBounds(values);
+                activeSpectrumStart = mix(activeSpectrumStart, targetStart, CONFIG.activeRangeEase);
+                activeSpectrumEnd = mix(activeSpectrumEnd, targetEnd, CONFIG.activeRangeEase);
+            }
+
+            function spectrumTriplet(low, mid, high, t) {
+                const center = CONFIG.midBandCenter;
+                if (t <= center) return mix(low, mid, smoothstep(0, center, t));
+                return mix(mid, high, smoothstep(center, 1, t));
+            }
+
+            function spectrumFloorFor(t) {
+                return Math.max(CONFIG.sensitivityFloor, spectrumTriplet(lowBandFloor, midBandFloor, highBandFloor, t));
+            }
+
+            function spectrumCeilingFor(t) {
+                return Math.max(CONFIG.sensitivityFloor, spectrumTriplet(lowBandCeiling, midBandCeiling, highBandCeiling, t));
+            }
+
+            function laneU(i) {
+                return i / Math.max(1, CONFIG.laneCount - 1);
+            }
+
+            function applyResize() {
+                const nextDpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 1.5));
+                const nextWidth = window.innerWidth;
+                const nextHeight = window.innerHeight;
+                if (nextDpr === dpr && nextWidth === width && nextHeight === height) return;
+                dpr = nextDpr;
+                width = nextWidth;
+                height = nextHeight;
+                canvas.width = Math.floor(width * dpr);
+                canvas.height = Math.floor(height * dpr);
+                canvas.style.width = `${width}px`;
+                canvas.style.height = `${height}px`;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                horizonY = height * CONFIG.horizonY;
+                buildLaneTables();
+                buildRenderCaches();
+                initStars();
+            }
+
+            function scheduleResize() {
+                if (resizeRaf) return;
+                resizeRaf = window.requestAnimationFrame(() => {
+                    resizeRaf = 0;
+                    applyResize();
+                });
+            }
+
+            function buildLaneTables() {
+                for (let i = 0; i < CONFIG.laneCount; i++) {
+                    const u = laneU(i);
+                    laneUs[i] = u;
+                    laneCenters[i] = u * 2 - 1;
+                    laneSpectrumIndex[i] = Math.floor(u * (CONFIG.spectrumSize - 1));
+                    laneFillStyles[i] = rgb(palette(u));
+                    if (i < CONFIG.laneCount - 1) {
+                        const midU = (u + laneU(i + 1)) * 0.5;
+                        midLaneCenters[i] = midU * 2 - 1;
+                        midLaneFillStyles[i] = rgb(palette(midU));
+                    }
+                }
+            }
+
+            function buildRenderCaches() {
+                centerX = width * 0.5;
+                centerY = height * 0.5;
+                horizonHalfWidth = width * CONFIG.horizonWidth * 0.5;
+                bottomY = height * (1 + CONFIG.bottomOverscan);
+                topFadeMinY = 0.16 * height;
+                topFadeMaxY = 0.34 * height;
+
+                rebuildBackgroundGradients();
+
+                scanlineCanvas = document.createElement('canvas');
+                scanlineCanvas.width = Math.max(1, width);
+                scanlineCanvas.height = Math.max(1, height);
+                const scanCtx = scanlineCanvas.getContext('2d');
+                scanCtx.fillStyle = `rgba(255,255,255,${CONFIG.scanlineAlpha})`;
+                for (let y = 0; y < height; y += 4) scanCtx.fillRect(0, y, width, 1);
+                buildFractalTables();
+            }
+
+            function rebuildBackgroundGradients() {
+                backgroundGradient = ctx.createLinearGradient(0, 0, 0, height);
+                backgroundGradient.addColorStop(0, rgb(mixColor([0.043, 0.102, 0.204], backgroundAccent, 0.52)));
+                backgroundGradient.addColorStop(0.34, rgb(mixColor([0.024, 0.043, 0.086], backgroundAccent, 0.32)));
+                backgroundGradient.addColorStop(0.58, rgb(mixColor([0.008, 0.008, 0.028], backgroundAccent, 0.18)));
+                backgroundGradient.addColorStop(1, '#000');
+
+                vignetteGradient = ctx.createRadialGradient(centerX, height * 0.58, width * 0.2, centerX, height * 0.58, width * 0.78);
+                vignetteGradient.addColorStop(0, 'rgba(0,0,0,0)');
+                vignetteGradient.addColorStop(1, 'rgba(0,0,0,0.46)');
+            }
+
+            function buildFractalTables() {
+                for (let i = 0; i < FRACTAL.sampleCount; i++) {
+                    const angle = (i / FRACTAL.sampleCount) * Math.PI * 2;
+                    fractalCos[i] = Math.cos(angle);
+                    fractalSin[i] = Math.sin(angle);
+                }
+            }
+
+            function initStars() {
+                stars.length = 0;
+                for (let i = 0; i < CONFIG.starCount; i++) stars.push(makeStar());
+            }
+
+            function makeStar() {
+                return {
+                    x: Math.random() * width,
+                    y: Math.random() * horizonY * 0.94,
+                    a: 0.08 + Math.random() * 0.34,
+                    s: 0.4 + Math.random() * 0.8
+                };
+            }
+
+            function buildBandMap() {
+                if (!audioContext || !freqData) return;
+                const nyquist = audioContext.sampleRate / 2;
+                bandStarts = new Uint16Array(CONFIG.spectrumSize);
+                bandEnds = new Uint16Array(CONFIG.spectrumSize);
+                for (let i = 0; i < CONFIG.spectrumSize; i++) {
+                    const [start, end] = bandBounds(i, nyquist);
+                    bandStarts[i] = start;
+                    bandEnds[i] = end;
+                }
+            }
+
+            function bandHz(i) {
+                const t = i / Math.max(1, CONFIG.spectrumSize - 1);
+                const curved = Math.pow(t, CONFIG.spectrumCurve);
+                return 24 * Math.pow(17000 / 24, curved);
+            }
+
+            function bandIndex(i, nyquist) {
+                const hz = bandHz(i);
+                const bin = Math.round((hz / nyquist) * (freqData.length - 1));
+                return clamp(bin, 0, freqData.length - 1);
+            }
+
+            function bandBounds(i, nyquist) {
+                const center = bandHz(i);
+                const prev = i ? bandHz(i - 1) : center;
+                const next = i < CONFIG.spectrumSize - 1 ? bandHz(i + 1) : center;
+                const lowHz = i ? Math.sqrt(prev * center) : 0;
+                const highHz = i === CONFIG.spectrumSize - 1 ? nyquist : Math.sqrt(center * next);
+                const start = Math.floor((lowHz / nyquist) * (freqData.length - 1));
+                const end = Math.ceil((highHz / nyquist) * (freqData.length - 1));
+                return [clamp(start, 0, freqData.length - 1), clamp(end, 0, freqData.length - 1)];
+            }
+
+            function readBandLevel(i) {
+                const start = bandStarts[i];
+                const end = bandEnds[i];
+                let sum = 0;
+                let peak = 0;
+                for (let bin = start; bin <= end; bin++) {
+                    const value = freqData[bin];
+                    sum += value;
+                    peak = Math.max(peak, value);
+                }
+                const avg = sum / (255 * Math.max(1, end - start + 1));
+                return shapeBandLevel(avg, peak / 255, i / Math.max(1, CONFIG.spectrumSize - 1));
+            }
+
+            function updateSpectrum(dt, now) {
+                if (analyser && freqData) {
+                    audioPollClock += dt;
+                    if (audioPollClock >= CONFIG.audioPollMs) {
+                        audioPollClock %= CONFIG.audioPollMs;
+                        analyser.getByteFrequencyData(freqData);
+                        updateSmoothedSpectrum(readBandLevel);
+                    }
+                } else {
+                    updateSmoothedSpectrum((i) => idleBand(now, i / CONFIG.spectrumSize));
+                }
+            }
+
+            function updateSmoothedSpectrum(readBand) {
+                let peak = 0;
+                let peakIndex = 0;
+                for (let i = 0; i < CONFIG.spectrumSize; i++) {
+                    const raw = readBand(i);
+                    const prev = smoothed[i];
+                    const smooth = i < 24 ? 0.8 : i > 90 ? 0.6 : 0.7;
+                    smoothed[i] = prev * smooth + raw * (1 - smooth);
+                    bandFlux[i] = mix(bandFlux[i], Math.abs(raw - prev), CONFIG.fluxBlend);
+                    if (smoothed[i] > peak) {
+                        peak = smoothed[i];
+                        peakIndex = i;
+                    }
+                }
+                dominantHz = bandHz(peakIndex);
+                updateBandStaleness();
+                updateBandNoiseFloor();
+                updateBandSensitivity();
+                updateActiveSpectrumRange(smoothed);
+            }
+
+            function updateBandSensitivity() {
+                const lowEnd = Math.floor((CONFIG.spectrumSize - 1) * CONFIG.lowBandEnd);
+                const highStart = Math.floor((CONFIG.spectrumSize - 1) * CONFIG.highBandStart);
+                const midStart = Math.min(lowEnd + 1, highStart - 1);
+                const midEnd = Math.max(midStart, highStart - 1);
+                const lowAnchor = anchorIndexInRange(0, lowEnd);
+                const midAnchor = anchorIndexInRange(midStart, midEnd);
+                const highAnchor = anchorIndexInRange(highStart, CONFIG.spectrumSize - 1);
+                const lowMean = meanInRange(0, lowEnd);
+                const midMean = meanInRange(midStart, midEnd);
+                const highMean = meanInRange(highStart, CONFIG.spectrumSize - 1);
+                lowBandFloor = easeFloor(lowBandFloor, lowMean * 0.38);
+                midBandFloor = easeFloor(midBandFloor, midMean * 0.18);
+                highBandFloor = easeFloor(highBandFloor, highMean * 0.08);
+                lowBandCeiling = easeCeiling(lowBandCeiling, anchorPeak(lowAnchor));
+                midBandCeiling = easeCeiling(midBandCeiling, anchorPeak(midAnchor));
+                highBandCeiling = easeCeiling(highBandCeiling, anchorPeak(highAnchor));
+            }
+
+            function meanInRange(start, end) {
+                let sum = 0;
+                for (let i = start; i <= end; i++) sum += smoothed[i];
+                return sum / Math.max(1, end - start + 1);
+            }
+
+            function anchorIndexInRange(start, end) {
+                let best = start;
+                let bestScore = -1;
+                for (let i = start; i <= end; i++) {
+                    const score = bandFlux[i] * (0.3 + smoothed[i]);
+                    if (score > bestScore) {
+                        best = i;
+                        bestScore = score;
+                    }
+                }
+                return best;
+            }
+
+            function anchorPeak(index) {
+                let peak = CONFIG.sensitivityFloor;
+                const start = Math.max(0, index - CONFIG.anchorRadius);
+                const end = Math.min(CONFIG.spectrumSize - 1, index + CONFIG.anchorRadius);
+                for (let i = start; i <= end; i++) peak = Math.max(peak, smoothed[i]);
+                return peak;
+            }
+
+            function easeFloor(current, target) {
+                const bounded = Math.max(CONFIG.sensitivityFloor, target);
+                const rate = bounded > current
+                    ? CONFIG.sensitivityFloorAttack
+                    : CONFIG.sensitivityFloorRelease;
+                return mix(current, bounded, rate);
+            }
+
+            function easeCeiling(current, target) {
+                const bounded = Math.max(CONFIG.sensitivityFloor, target);
+                const rate = bounded > current
+                    ? CONFIG.sensitivityCeilingAttack
+                    : CONFIG.sensitivityCeilingRelease;
+                return mix(current, bounded, rate);
+            }
+
+            function idleBand(now, t) {
+                const seconds = now * 0.001;
+                const laneA = wrappedPeak(t, (0.18 + seconds * 0.024) % 1, 0.12) * (0.5 + 0.5 * Math.sin(seconds * 1.7));
+                const laneB = wrappedPeak(t, (0.52 - seconds * 0.017 + 1) % 1, 0.1) * (0.5 + 0.5 * Math.sin(seconds * 2.1 + 1.2));
+                const laneC = wrappedPeak(t, (0.82 + seconds * 0.012) % 1, 0.14) * (0.5 + 0.5 * Math.cos(seconds * 1.3 + 0.7));
+                const shimmer = 0.5 + 0.5 * Math.sin(seconds * 8.4 + t * 48);
+                const undertow = 0.5 + 0.5 * Math.cos(seconds * 2.6 - t * 22);
+                return clamp(laneA * 0.34 + laneB * 0.28 + laneC * 0.26 + shimmer * 0.08 + undertow * 0.1, 0, 1);
+            }
+
+            function updateStats() {
+                const nextEnergy = average(8, 60);
+                const nextBass = average(2, 20);
+                const prev = energy;
+                energy = energy * 0.84 + nextEnergy * 0.16;
+                bass = bass * 0.82 + nextBass * 0.18;
+                punch = punch * 0.76 + Math.max(0, energy - prev) * 3.2;
+                updateBackgroundAccent(smoothed);
+                energyEl.textContent = energy.toFixed(2);
+                punchEl.textContent = punch.toFixed(2);
+                peakEl.textContent = `${Math.round(dominantHz)} Hz`;
+            }
+
+            function average(lo, hi) {
+                let sum = 0;
+                let count = 0;
+                for (let i = lo; i <= hi; i++) {
+                    sum += smoothed[clamp(i, 0, CONFIG.spectrumSize - 1)];
+                    count++;
+                }
+                return count ? sum / count : 0;
+            }
+
+            function updateRows(dt, now) {
+                sampleClock += dt;
+                while (sampleClock >= CONFIG.sampleMs) {
+                    sampleClock -= CONFIG.sampleMs;
+                    writeSnapshot(now);
+                }
+                for (let i = 0; i < rowCount; i++) rowAges[rowIndexFromNewest(i)] += dt;
+                while (rowCount) {
+                    const oldestIndex = rowIndexFromNewest(rowCount - 1);
+                    if (rowAges[oldestIndex] <= CONFIG.travelMs) break;
+                    rowCount--;
+                }
+            }
+
+            function rowIndexFromNewest(offset) {
+                return (rowHead - offset + MAX_ROWS) % MAX_ROWS;
+            }
+
+            function writeSnapshot(now) {
+                rowHead = (rowHead + 1) % MAX_ROWS;
+                const values = rowValues[rowHead];
+                const nextRow = analyser ? projectSpectrumRow(smoothed) : null;
+                for (let i = 0; i < CONFIG.laneCount; i++) values[i] = nextRow ? nextRow[i] : sampleLane(now, i);
+                maybeCaptureDevRow(values, now);
+                rowAges[rowHead] = 0;
+                rowCount = Math.min(MAX_ROWS, rowCount + 1);
+            }
+
+            function sampleLane(now, lane) {
+                if (!analyser) return idleBand(now, laneUs[lane]);
+                const sourcePosition = mix(activeSpectrumStart, activeSpectrumEnd, laneUs[lane]);
+                return applyBandSensitivity(sampleSpectrumValue(smoothed, sourcePosition), Math.round(sourcePosition));
+            }
+
+            function clearFrame(now) {
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = backgroundGradient;
+                ctx.fillRect(0, 0, width, height);
+                drawStars(now);
+            }
+
+            function drawStars(now) {
+                for (let i = 0; i < stars.length; i++) drawStar(stars[i], i, now);
+            }
+
+            function drawStar(star, i, now) {
+                const drift = (now * 0.006 * star.s) % (width + 80);
+                const x = (star.x + drift) % (width + 80) - 40;
+                const twinkle = 0.7 + 0.3 * Math.sin(now * 0.001 + i);
+                drawDot(x, star.y, CONFIG.dotRadius, STAR_FILL, star.a * twinkle);
+            }
+
+            function drawDot(x, y, radius, fillStyle, alpha) {
+                if (y <= radius * 2 || alpha <= 0) return;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = fillStyle;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            function drawRows() {
+                for (let i = rowCount - 1; i >= 0; i--) drawRow(rowIndexFromNewest(i));
+            }
+
+            function currentViewMode() {
+                return VIEW_MODES[viewModeIndex];
+            }
+
+            function normalizeModeId(value) {
+                return (value || '').trim().toLowerCase();
+            }
+
+            function viewModeIndexById(modeId) {
+                const normalized = normalizeModeId(modeId);
+                if (normalized === 'fractal') return 1;
+                for (let i = 0; i < VIEW_MODES.length; i++) {
+                    if (VIEW_MODES[i].id === normalized) return i;
+                }
+                return -1;
+            }
+
+            function parseViewModeHash(hash = window.location.hash) {
+                const raw = normalizeModeId(hash.replace(/^#/, ''));
+                if (!raw) return '';
+                if (!raw.includes('=')) return raw;
+                const params = new URLSearchParams(raw);
+                return normalizeModeId(params.get('mode') || params.get('view') || '');
+            }
+
+            function readViewModeFromHash(hash = window.location.hash) {
+                return viewModeIndexById(parseViewModeHash(hash));
+            }
+
+            function syncHashToViewMode(modeId) {
+                const nextHash = `#mode=${modeId}`;
+                if (window.location.hash === nextHash) return;
+                window.location.hash = nextHash;
+            }
+
+            function applyViewModeFromHash() {
+                const nextIndex = readViewModeFromHash();
+                if (nextIndex === -1) return;
+                setViewMode(nextIndex, { syncHash: false, reveal: false });
+                syncHashToViewMode(currentViewMode().id);
+            }
+
+            function handleHashChange() {
+                applyViewModeFromHash();
+            }
+
+            function updateModeLabel() {
+                modeEl.textContent = currentViewMode().label;
+            }
+
+            function updateHeroMessage() {
+                const isLive = Boolean(analyser);
+                const mode = currentViewMode().id;
+                if (mode === 'road') {
+                    setMessage(isLive
+                        ? 'Road mode. Live horizon snapshots stream down the dotted rainbow road. Use the View button or press Space to switch views.'
+                        : 'Road mode. Synthetic horizon snapshots keep flowing toward you until the mic starts. Use the View button or press Space to switch views.');
+                    return;
+                }
+                setMessage(isLive
+                    ? 'Spacefall mode. Live center-born spectrum rows expand from the middle of the screen to the borders using the same frozen travel dynamics as the road. Use the View button or press Space to switch views.'
+                    : 'Spacefall mode. Synthetic center-born spectrum rows expand from the middle of the screen to the borders until the mic starts. Use the View button or press Space to switch views.');
+            }
+
+            function setViewMode(nextIndex, { syncHash = true, reveal = true } = {}) {
+                viewModeIndex = ((nextIndex % VIEW_MODES.length) + VIEW_MODES.length) % VIEW_MODES.length;
+                updateModeLabel();
+                updateButtons();
+                updateHeroMessage();
+                if (reveal) revealOverlayTemporarily();
+                if (syncHash) syncHashToViewMode(currentViewMode().id);
+            }
+
+            function cycleViewMode() {
+                setViewMode(viewModeIndex + 1);
+            }
+
+            function measureBand(values, start, end) {
+                let total = 0;
+                const lo = Math.max(0, start);
+                const hi = Math.min(CONFIG.laneCount - 1, end);
+                for (let i = lo; i <= hi; i++) total += values[i];
+                return total / Math.max(1, hi - lo + 1);
+            }
+
+            function sampleFractalBand(values, t) {
+                const center = Math.floor(clamp(t, 0, 0.9999) * (CONFIG.laneCount - 1));
+                const start = Math.max(0, center - 1);
+                const end = Math.min(CONFIG.laneCount - 1, center + 1);
+                return measureBand(values, start, end);
+            }
+
+            function drawFractalScene(now) {
+                for (let offset = rowCount - 1; offset >= 0; offset--) drawFractalRow(rowIndexFromNewest(offset));
+            }
+
+            function drawFractalRow(rowIndex) {
+                const age = rowAges[rowIndex];
+                const depth = age / CONFIG.travelMs;
+                if (depth <= 0 || depth >= 1) return;
+                const values = rowValues[rowIndex];
+                const outward = rowTravelT(depth);
+                const maxRadius = Math.hypot(width, height) * 0.5 * FRACTAL.shellMaxRadiusFactor;
+                const baseRadius = Math.max(FRACTAL.shellMinRadius, maxRadius * outward);
+                const fade = 1 - smoothstep(0, 1, depth);
+                for (let i = 0; i < FRACTAL.sampleCount; i++) drawFractalDot(values, age, i, baseRadius, fade, depth);
+            }
+
+            function drawFractalDot(values, age, sampleIndex, baseRadius, fade, depth) {
+                const t = sampleIndex / FRACTAL.sampleCount;
+                const amp = sampleFractalBand(values, t);
+                const laneIndex = Math.min(CONFIG.laneCount - 1, Math.floor(t * CONFIG.laneCount));
+                const lift = amp * FRACTAL.radialLift * (1 - depth * 0.35);
+                const radius = baseRadius + lift;
+                const x = centerX + fractalCos[sampleIndex] * radius;
+                const y = centerY + fractalSin[sampleIndex] * radius;
+                const sparkle = 0.82 + 0.18 * Math.sin(age * 0.004 + sampleIndex * 0.91 + amp * 11.7);
+                const glow = (0.02 + amp * 0.16) * fade * sparkle;
+                const color = laneFillStyles[laneIndex];
+                if (glow > 0.006) drawDot(x, y, CONFIG.dotRadius * FRACTAL.glowScale, color, glow);
+                drawDot(x, y, CONFIG.dotRadius * FRACTAL.coreScale, color, (0.08 + amp * 0.9) * fade);
+                if (depth < 0.06 && sampleIndex % 12 === 0) drawDot(centerX, centerY, CONFIG.dotRadius * 1.5, WHITE_FILL, fade * 0.12);
+            }
+
+            function drawRow(rowIndex) {
+                const depth = rowAges[rowIndex] / CONFIG.travelMs;
+                if (depth <= 0 || depth >= 1) return;
+                const widthNow = rowWidth(depth);
+                const y = rowY(depth);
+                const values = rowValues[rowIndex];
+                for (let lane = 0; lane < CONFIG.laneCount; lane++) drawRowDot(values, rowAges[rowIndex], lane, widthNow, y, depth);
+            }
+
+            function drawRowDot(values, age, lane, widthNow, y, depth) {
+                const x = centerX + laneCenters[lane] * widthNow * 0.5;
+                const amp = values[lane];
+                const lift = amp * CONFIG.horizonLift * (1 - depth);
+                const fade = 1 - smoothstep(0, 1, depth);
+                const sparkle = 0.82 + 0.18 * Math.sin(age * 0.004 + lane * 0.91 + amp * 11.7);
+                const glow = (0.02 + amp * 0.16) * fade * sparkle;
+                const color = laneFillStyles[lane];
+                if (glow > 0.006) drawDot(x, y - lift, CONFIG.dotRadius * 3.8, color, glow);
+                drawDot(x, y - lift, CONFIG.dotRadius, color, (0.08 + amp * 0.9) * fade);
+            }
+
+            function rowWidth(depth) {
+                return mix(width * CONFIG.horizonWidth, width * CONFIG.nearWidth, Math.pow(depth, 0.92));
+            }
+
+            function rowY(depth) {
+                const t = Math.pow(depth, 1.75);
+                return mix(horizonY, bottomY, t);
+            }
+
+            function rowTravelT(depth) {
+                return Math.pow(depth, 1.75);
+            }
+
+            function drawHorizon() {
+                if (!rowCount) return;
+                const newest = rowValues[rowHead];
+                for (let lane = 0; lane < CONFIG.laneCount; lane++) drawHorizonDot(newest, lane);
+                for (let lane = 0; lane < CONFIG.laneCount - 1; lane++) drawHorizonMidDot(newest, lane);
+            }
+
+            function drawHorizonDot(values, lane) {
+                const x = centerX + laneCenters[lane] * horizonHalfWidth;
+                const amp = values[lane];
+                const jitter = (Math.sin(lane * 12.73 + amp * 19.1) * 0.5 + 0.5) * 10;
+                const y = horizonY - amp * CONFIG.horizonLift - jitter * smoothstep(0.02, 0.3, amp);
+                const topFade = smoothstep(topFadeMinY, topFadeMaxY, y);
+                const color = laneFillStyles[lane];
+                if (amp > 0.001 && topFade > 0.02) {
+                    drawDot(x, y, CONFIG.dotRadius * 5, color, (0.08 + amp * 0.12) * topFade);
+                    drawDot(x, y, CONFIG.dotRadius * 1.9, WHITE_FILL, (0.08 + amp * 0.14) * topFade);
+                }
+                if (topFade > 0.02) drawDot(x, y, CONFIG.dotRadius, color, (0.32 + amp * 0.78) * topFade);
+            }
+
+            function drawHorizonMidDot(values, lane) {
+                const amp = (values[lane] + values[lane + 1]) * 0.5;
+                const x = centerX + midLaneCenters[lane] * horizonHalfWidth;
+                const jitter = (Math.sin((lane + 0.5) * 10.91 + amp * 17.3) * 0.5 + 0.5) * 8;
+                const y = horizonY - amp * CONFIG.horizonLift - jitter * smoothstep(0.02, 0.3, amp);
+                const topFade = smoothstep(topFadeMinY, topFadeMaxY, y);
+                const color = midLaneFillStyles[lane];
+                if (amp <= 0.001 || topFade <= 0.02) return;
+                drawDot(x, y, CONFIG.dotRadius * 0.9, color, (0.24 + amp * 0.52) * topFade);
+            }
+
+            function drawScanlines() {
+                if (!scanlineCanvas) return;
+                ctx.globalAlpha = 1;
+                ctx.drawImage(scanlineCanvas, 0, 0);
+            }
+
+            function drawVignette() {
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = vignetteGradient;
+                ctx.fillRect(0, 0, width, height);
+            }
+
+            function setMessage(text) {
+                msg.textContent = text;
+            }
+
+            function setOverlayVisible(visible) {
+                ui.classList.toggle('hidden', !visible);
+            }
+
+            function scheduleOverlayHide(delay = 10000) {
+                clearTimeout(overlayHideTimer);
+                if (!analyser) return;
+                overlayHideTimer = window.setTimeout(() => setOverlayVisible(false), delay);
+            }
+
+            function revealOverlayTemporarily() {
+                setOverlayVisible(true);
+                if (analyser) scheduleOverlayHide(3700);
+            }
+
+            function shouldIgnoreSpaceToggle(event) {
+                const target = event.target;
+                if (!target || !(target instanceof HTMLElement)) return false;
+                if (target.closest('button')) return true;
+                if (target.isContentEditable) return true;
+                return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+            }
+
+            function handleKeydown(event) {
+                if (event.code !== 'Space' || event.repeat || shouldIgnoreSpaceToggle(event)) return;
+                event.preventDefault();
+                cycleViewMode();
+            }
+
+            function updateButtons() {
+                toggleAudioBtn.textContent = analyser ? 'Stop' : 'Start mic';
+                toggleViewBtn.textContent = `View: ${currentViewMode().label}`;
+                fullscreenBtn.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+            }
+
+            async function startAudio() {
+                if (analyser) return;
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const source = audioContext.createMediaStreamSource(stream);
+                    analyser = audioContext.createAnalyser();
+                    analyser.fftSize = CONFIG.fftSize;
+                    analyser.smoothingTimeConstant = 0.72;
+                    source.connect(analyser);
+                    freqData = new Uint8Array(analyser.frequencyBinCount);
+                    buildBandMap();
+                    audioPollClock = CONFIG.audioPollMs;
+                    statsClock = CONFIG.statsMs;
+                    updateButtons();
+                    updateHeroMessage();
+                    setOverlayVisible(true);
+                    scheduleOverlayHide();
+                } catch (error) {
+                    console.error(error);
+                    stopAudio();
+                    setMessage('Microphone access failed. The selected view stays in idle mode with synthetic spectrum motion.');
+                }
+            }
+
+            function stopAudio() {
+                clearTimeout(overlayHideTimer);
+                if (stream) stream.getTracks().forEach((track) => track.stop());
+                if (audioContext) audioContext.close().catch(() => { });
+                audioContext = null;
+                analyser = null;
+                stream = null;
+                freqData = null;
+                bandStarts = new Uint16Array(0);
+                bandEnds = new Uint16Array(0);
+                bandFlux.fill(0);
+                lowBandFloor = 0.06;
+                lowBandCeiling = 0.24;
+                midBandFloor = 0.045;
+                midBandCeiling = 0.18;
+                highBandFloor = 0.035;
+                highBandCeiling = 0.14;
+                activeSpectrumStart = 0;
+                activeSpectrumEnd = CONFIG.spectrumSize - 1;
+                bandStaleness.fill(0);
+                bandNoiseFloor.fill(0);
+                devCapturedRowCount = 0;
+                lastDevCaptureLogAt = -Infinity;
+                window.__vizCapturedRows = [];
+                audioPollClock = 0;
+                updateButtons();
+                updateHeroMessage();
+                setOverlayVisible(true);
+            }
+
+            function handleVisibilityChange() {
+                isPageVisible = !document.hidden;
+                lastFrame = 0;
+                if (isPageVisible) {
+                    setOverlayVisible(true);
+                    if (analyser) scheduleOverlayHide(2500);
+                }
+            }
+
+            async function toggleAudio() {
+                if (analyser) stopAudio();
+                else await startAudio();
+            }
+
+            async function toggleFullscreen() {
+                if (document.fullscreenElement) await document.exitFullscreen();
+                else await document.documentElement.requestFullscreen();
+                updateButtons();
+            }
+
+            function frame(now) {
+                requestAnimationFrame(frame);
+                if (!lastFrame) lastFrame = now;
+                const dt = Math.min(40, now - lastFrame);
+                lastFrame = now;
+                if (!isPageVisible) return;
+                updateSpectrum(dt, now);
+                statsClock += dt;
+                if (statsClock >= CONFIG.statsMs) {
+                    statsClock %= CONFIG.statsMs;
+                    updateStats();
+                }
+                updateRows(dt, now);
+                clearFrame(now);
+                if (currentViewMode().id === 'road') {
+                    drawRows();
+                    drawHorizon();
+                } else {
+                    drawFractalScene(now);
+                }
+                drawScanlines();
+                drawVignette();
+                ctx.globalAlpha = 1;
+            }
+
+            toggleAudioBtn.addEventListener('click', () => toggleAudio().catch(console.error));
+            toggleViewBtn.addEventListener('click', cycleViewMode);
+            fullscreenBtn.addEventListener('click', () => toggleFullscreen().catch(console.error));
+            window.addEventListener('mousemove', revealOverlayTemporarily);
+            window.addEventListener('pointerdown', revealOverlayTemporarily);
+            window.addEventListener('keydown', handleKeydown);
+            window.addEventListener('hashchange', handleHashChange);
+            document.addEventListener('fullscreenchange', updateButtons);
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            window.addEventListener('resize', scheduleResize);
+
+            applyResize();
+            applyViewModeFromHash();
+            updateButtons();
+            updateModeLabel();
+            setOverlayVisible(true);
+            writeSnapshot(0);
+            updateHeroMessage();
+            updateStats();
+            requestAnimationFrame(frame);
+        })();
+    </script>
+</body>
+
+</html>

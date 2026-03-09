@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This project is a single-page, browser-based music visualizer in `index.html`. It uses the Canvas 2D API, the Web Audio API, and microphone input to render a dotted retro-futuristic road where horizon spectrum snapshots travel toward the viewer in a TRON-meets-Rad-Racer style. Keep changes lightweight, readable, and performance-aware.
+This project is a single-page, browser-based music visualizer developed in `src/index.html` and built to a production root `index.html`. It uses the Canvas 2D API, the Web Audio API, and microphone input to render a dotted retro-futuristic road where horizon spectrum snapshots travel toward the viewer in a TRON-meets-Rad-Racer style. Keep changes lightweight, readable, and performance-aware.
 
 ### 1. Plan Mode Default
 - Enter plan mode for any non-trivial change, especially anything that affects audio analysis, render performance, UI structure, or microphone flow.
@@ -11,7 +11,7 @@ This project is a single-page, browser-based music visualizer in `index.html`. I
 ### 2. Subagent Strategy To Keep Main Context Window Clean
 - Offload exploration and broad code analysis to subagents when the task touches multiple concerns.
 - Use one subagent for one concern at a time, such as render pipeline review, audio mapping review, or UX copy review.
-- Keep the main thread focused on implementation decisions inside `index.html` unless the project structure grows.
+- Keep the main thread focused on implementation decisions inside `src/index.html` unless the project structure grows.
 
 ### 3. Self-Improvement Loop
 - After any user correction, record the lesson in `tasks/lessons.md`.
@@ -35,10 +35,22 @@ This project is a single-page, browser-based music visualizer in `index.html`. I
 - If a fix feels patchy, step back and choose the cleaner approach for the render loop, audio data mapping, or DOM overlay.
 
 ### 6. Autonomous Bug Fixing
-- When a bug is reported, reproduce it from the current `index.html` behavior and fix the root cause.
+- When a bug is reported, reproduce it from the current `src/index.html` behavior and fix the root cause.
 - Focus first on the likely failure areas: microphone initialization, analyser configuration, canvas resize logic, performance throttling, and draw-order issues.
 - Use errors, visible regressions, and broken interaction states as signals to investigate, not reasons to ask the user to debug for you.
 - Keep fixes minimal and safe so the visual style and motion language remain intact.
+
+### 7. Performance And Resource Use
+- Treat performance and resource consumption as a first-class requirement on every task, not only explicit optimization work.
+- Consider CPU cost, memory churn, animation-frame budget, and audio-analysis overhead before adding logic or effects.
+- Prefer approaches that avoid per-frame allocations, redundant passes, and expensive recalculation when a cached or simpler option will work.
+- If a change improves visuals or behavior but risks heavier runtime cost, choose the lighter implementation unless there is a strong reason not to.
+
+### 8. Test-Driven Development
+- Use TDD for features, bug fixes, and behavior changes: write the failing test first, verify the failure, then implement the minimal code change to make it pass.
+- Add regression tests for reported visual or audio issues before adjusting the implementation.
+- Keep tests focused on observable behavior and project-specific expectations instead of implementation trivia.
+- Re-run the relevant tests after each change and keep the full suite green before considering the task done.
 
 ## Task Management
 1. **Plan First**: Write checkable items to `tasks/todo.md` for non-trivial work.

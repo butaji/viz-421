@@ -29,3 +29,15 @@
 - When a visual mode is user-addressable, mirror it in `location.hash` so reloads, direct links, and browser navigation preserve the current view.
 - If the user says the fractal view feels shaky, freeze each shell's shape at snapshot time and animate only its age-based travel; time-driven wobble breaks the falling illusion.
 - If the alternate mode should feel like the road, reuse the exact row-history travel model and only swap the projection from horizon-forward to center-outward.
+- If a road edge goes visually dead after spectrum remapping, inspect high-frequency band shaping first; wide treble bands need peak-aware weighting or gentle tilt compensation, not just plain averaging.
+- If the user says X positions and particle count must stay fixed, do not remap projection or lane assignment; adjust only amplitude sensitivity with a slow per-band input-history envelope.
+- If the user asks to analyze the whole spectrum and rescale slowly, prefer slowly eased low/high spectrum anchors that scale amplitude in place over any X-axis remap or fast auto-normalization.
+- If the user wants the left/right fulfillment to follow where the music is changing most, choose slow low/high anchors from bands with the strongest ongoing change, then scale amplitude in place from those anchors.
+- If the user wants dev-only workflow separated from the production artifact, keep editable sources under `src/` and generate the standalone production `./index.html` from that source.
+- If the user reports one side staying flat, add a regression test on sensitivity output spread for that side; fixed-X spectrum scaling still needs local contrast, not just global normalization.
+- For fixed-X whole-spectrum scaling, protect both low and high edges with edge-specific floor softening and spread tests; global normalization alone can still leave dead zones at the extremes.
+- If the user says green/blue never reaches the ground while red/purple stays flat, add occupancy tests for the body and tail, not just edge-spread tests; usable spectrum scaling must cover height as well as contrast.
+- If the user says the whole spectrum still is not aligned to the visualizer, move from edge-specific boosts toward slow low/mid/high envelope scaling and test body/tail occupancy explicitly.
+- If real microphone data is needed for tests, add a localhost-only console capture hook in dev mode so the user can export actual spectrum rows from the browser.
+- If a plateau persists too long at nearly the same intensity, add slow stale-noise damping based on low band flux; treat it as sensitivity decay with slow recovery, not a hard gate.
+- If the user wants more atmosphere, derive background color from dominant spectrum energy very subtly and keep it dark and slow; the road should stay the hero.
