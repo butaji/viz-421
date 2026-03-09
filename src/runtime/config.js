@@ -1,0 +1,76 @@
+export const CONFIG = {
+    fftSize: 4096,
+    spectrumSize: 120,
+    spectrumCurve: 0.84,
+    spectrumLift: 1.85,
+    sensitivityFloor: 0.035,
+    sensitivityBlend: 0.74,
+    sensitivityRightBoost: 0.22,
+    sensitivityGamma: 0.88,
+    sensitivityCeilingAttack: 0.014,
+    sensitivityCeilingRelease: 0.0016,
+    sensitivityFloorAttack: 0.006,
+    sensitivityFloorRelease: 0.0012,
+    fluxBlend: 0.14,
+    anchorRadius: 2,
+    activeRangeThreshold: 0.08,
+    activeRangePadding: 2,
+    activeRangeEase: 0.045,
+    activeRangeMinSpan: 56,
+    staleFluxThreshold: 0.0025,
+    staleAttack: 0.018,
+    staleRelease: 0.01,
+    staleMaxDamping: 0.34,
+    noiseFluxThreshold: 0.06,
+    noiseFloorRise: 0.12,
+    noiseFloorFall: 0.01,
+    noiseFloorStrength: 0.78,
+    backgroundColorEase: 0.028,
+    backgroundTintStrength: 0.16,
+    lowBandEnd: 0.38,
+    midBandCenter: 0.58,
+    highBandStart: 0.62,
+    devCaptureRows: 6,
+    devCaptureStreamMs: 5000,
+    laneCount: 120,
+    rowCount: 22,
+    horizonY: 0.58,
+    horizonWidth: 1.0,
+    nearWidth: 1.18,
+    bottomOverscan: 0.12,
+    sampleMs: 120,
+    audioPollMs: 50,
+    statsMs: 200,
+    travelMs: 12000,
+    dotRadius: 1.15,
+    horizonLift: 276,
+    starCount: 180,
+    scanlineAlpha: 0.028,
+}
+
+export const VIEW_MODES = [
+    { id: 'road', label: 'Road' },
+    { id: 'sphere', label: 'Sphere' },
+]
+
+export const FRACTAL = {
+    sampleCount: 72,
+    shellMinRadius: 0,
+    shellMaxRadiusFactor: 1.02,
+    radialLift: 120,
+    minAlpha: 0.025,
+    glowScale: 3.4,
+    coreScale: 1.2,
+}
+
+export const MAX_ROWS = Math.ceil(CONFIG.travelMs / CONFIG.sampleMs) + 2
+export const STAR_FILL = 'rgb(102,242,255)'
+export const WHITE_FILL = 'rgb(255,255,255)'
+export const PALETTE = [
+    [0.14, 0.45, 1.0],
+    [0.0, 0.95, 1.0],
+    [0.12, 0.98, 0.78],
+    [0.98, 0.98, 0.26],
+    [1.0, 0.48, 0.18],
+    [1.0, 0.18, 0.72],
+]

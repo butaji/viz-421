@@ -6,17 +6,19 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 const root = process.cwd()
-const sourcePath = path.join(root, 'src', 'index.html')
+const sourcePaths = [
+  path.join(root, 'src', 'runtime', 'config.js'),
+  path.join(root, 'src', 'runtime', 'math.js'),
+  path.join(root, 'src', 'runtime', 'color.js'),
+  path.join(root, 'src', 'runtime', 'core.js'),
+]
 const prodPath = path.join(root, 'index.html')
 
 async function readSource() {
-  return readFile(sourcePath, 'utf8')
-}
-
-function extractInlineScript(html) {
-  const match = html.match(/<script>([\s\S]*)<\/script>/)
-  if (!match) throw new Error('Inline script not found in src/index.html')
-  return match[1]
+  const parts = await Promise.all(sourcePaths.map((filePath) => readFile(filePath, 'utf8')))
+  return parts
+    .map((part) => part.replace(/^import .*$/gm, '').replace(/export\s+/g, ''))
+    .join('\n\n')
 }
 
 function findFunction(script, name) {
@@ -62,8 +64,7 @@ function findBalanced(source, start, openChar, closeChar) {
 }
 
 export async function loadVisualizerEnvironment(functionNames, constNames = [], extras = {}) {
-  const html = await readSource()
-  const script = extractInlineScript(html)
+  const script = await readSource()
   const snippets = [
     ...constNames.map((name) => findConst(script, name)),
     ...functionNames.map((name) => findFunction(script, name)),
@@ -84,5 +85,5 @@ export async function loadVisualizerEnvironment(functionNames, constNames = [], 
 export async function buildOutputContainsProdPaths() {
   await execFileAsync('node', ['scripts/build-prod.mjs'], { cwd: root })
   const html = await readFile(prodPath, 'utf8')
-  return html.includes('pics/p1.png') && !html.includes('../pics/')
+  return html.includes('pics/p1.png') && !html.includes('../pics/') && !html.includes('type="module" src="./main.js"')
 }

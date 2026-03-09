@@ -41,3 +41,5 @@
 - If real microphone data is needed for tests, add a localhost-only console capture hook in dev mode so the user can export actual spectrum rows from the browser.
 - If a plateau persists too long at nearly the same intensity, add slow stale-noise damping based on low band flux; treat it as sensitivity decay with slow recovery, not a hard gate.
 - If the user wants more atmosphere, derive background color from dominant spectrum energy very subtly and keep it dark and slow; the road should stay the hero.
+- Keep newly added or extracted functions short: target about 20 lines and avoid anything over 40 unless there is a strong, explicit reason.
+- When adding new views, reuse the same frozen row-history feed and change projection geometry rather than adding a separate audio/render pipeline per mode.

@@ -93,6 +93,16 @@ describe('visualizer core behavior', () => {
     expect(tinted[2]).toBeLessThan(0.2)
   })
 
+  test('cube geometry keeps a visible front face and inset back face', async () => {
+    const env = await loadVisualizerEnvironment(['mix', 'cubeFrame', 'shapePulseScale'], ['CONFIG'])
+    const frame = env.cubeFrame(1200, 700, 0.55)
+    expect(frame.frontHalfWidth).toBeGreaterThan(frame.backHalfWidth)
+    expect(frame.frontHalfHeight).toBeGreaterThan(frame.backHalfHeight)
+    expect(frame.backOffsetX).toBeGreaterThan(0)
+    expect(frame.backOffsetY).toBeLessThan(0)
+    expect(env.shapePulseScale(0.8, 0.3)).toBeGreaterThan(env.shapePulseScale(0.2, 0.3))
+  })
+
   test('band mapping stays monotonic and within analyser bounds', async () => {
     const env = await loadVisualizerEnvironment(
       ['clamp', 'bandHz', 'bandIndex', 'bandBounds'],
