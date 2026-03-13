@@ -64,6 +64,13 @@
 - [ ] Minimal fix: remove `Spacefall` from mode flow and strengthen `Sphere`/`Cube` projections so particles define those forms and pulse with music.
 - [ ] Verification: run full tests and the production build after the mode refinement.
 
+## Active Plan - iPad Resource Optimization
+
+- [x] Scope review: reduce iPad resource consumption with behavior-neutral render/audio loop cleanup only, preserving the current road/sphere visuals and interaction flow.
+- [x] Test first: add failing regression coverage for draw culling and spectrum-update equivalence before changing runtime internals.
+- [x] Minimal fix: cull dots that are fully off-screen and cache the existing per-band smoothing buckets so the live audio loop reuses that bookkeeping.
+- [x] Verification: run the relevant tests and production build, then record the implementation and verification notes.
+
 ## Active Plan - iPad Fullscreen Keep-Awake
 
 - [x] Scope review: detect iPad and fullscreen-only sessions, then keep a tiny hidden looping media element alive without changing desktop or non-fullscreen behavior.
@@ -85,12 +92,16 @@
 ## Notes
 
 - Concerns touched: audio input, rendering, and performance.
+- Current concerns touched: iPad resource use, render-loop cost, and audio-analysis overhead.
 - Current concerns touched: fullscreen UX, iPad device detection, and low-overhead media playback.
 - Visual guardrails: preserve the same road framing, dot-only language, and horizon-to-viewer motion.
 - Performance guardrails: reuse typed arrays, avoid per-frame allocations, and keep lane sampling lightweight.
 
 ## Review
 
+- Added regression coverage that `drawDot()` skips fully off-screen dots and that the extracted band-smoothing table preserves the existing low/mid/high smoothing buckets before changing the runtime.
+- `src/runtime/core.js` now culls dots that are fully beyond the canvas bounds and reuses a cached `Float32Array` of per-band smoothing values inside `updateSmoothedSpectrum()`, reducing avoidable work without changing the scene's visible output.
+- Verification completed with targeted Vitest checks, a full `npm test` pass, and `npm run build`; the earlier build-path timeout only occurred when test and build were launched in parallel against the same production artifact.
 - Development now lives in `src/index.html`, Vite serves it with hot reload at `http://127.0.0.1:8080/src/`, and the production build writes a single minified `./index.html` from that source.
 - The test suite now covers the source shell, inline script syntax, helper math, palette/rgb logic, band mapping, adaptive scaling behavior, anchor updates, and production path rewriting.
 - Added a left-side flattening regression test so low-band sensitivity scaling must preserve visible variation instead of compressing neighboring low values into nearly the same output.

@@ -155,6 +155,35 @@ describe('visualizer core behavior', () => {
     expect(env.shapePulseScale(0.8, 0.3)).toBeGreaterThan(env.shapePulseScale(0.2, 0.3))
   })
 
+  test('drawDot skips dots that are fully outside the viewport', async () => {
+    const calls = []
+    const env = await loadVisualizerEnvironment(['drawDot'], [], {
+      width: 1200,
+      height: 700,
+      ctx: {
+        beginPath: () => calls.push('beginPath'),
+        arc: () => calls.push('arc'),
+        fill: () => calls.push('fill'),
+        fillStyle: '',
+        globalAlpha: 1,
+      },
+    })
+    env.drawDot(1305, 480, 8, 'rgb(255, 0, 0)', 0.8)
+    env.drawDot(-20, 480, 8, 'rgb(255, 0, 0)', 0.8)
+    env.drawDot(320, 715, 8, 'rgb(255, 0, 0)', 0.8)
+    expect(calls).toHaveLength(0)
+  })
+
+  test('band smoothing table preserves the existing low-mid-high buckets', async () => {
+    const env = await loadVisualizerEnvironment(['buildBandSmoothingTable'], ['CONFIG'])
+    const table = env.buildBandSmoothingTable(env.CONFIG.spectrumSize)
+    expect(table[0]).toBeCloseTo(0.8, 5)
+    expect(table[23]).toBeCloseTo(0.8, 5)
+    expect(table[24]).toBeCloseTo(0.7, 5)
+    expect(table[90]).toBeCloseTo(0.7, 5)
+    expect(table[91]).toBeCloseTo(0.6, 5)
+  })
+
   test('band mapping stays monotonic and within analyser bounds', async () => {
     const env = await loadVisualizerEnvironment(
       ['clamp', 'bandHz', 'bandIndex', 'bandBounds'],

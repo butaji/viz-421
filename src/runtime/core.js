@@ -32,6 +32,7 @@ export function bootVisualizer() {
             const midLaneFillStyles = new Array(Math.max(0, CONFIG.laneCount - 1));
             const fractalCos = new Float32Array(FRACTAL.sampleCount);
             const fractalSin = new Float32Array(FRACTAL.sampleCount);
+            const bandSmoothing = buildBandSmoothingTable(CONFIG.spectrumSize);
 
             let width = 0;
             let height = 0;
@@ -388,6 +389,14 @@ export function bootVisualizer() {
                 return i / Math.max(1, CONFIG.laneCount - 1);
             }
 
+            function buildBandSmoothingTable(spectrumSize) {
+                const table = new Float32Array(spectrumSize);
+                for (let i = 0; i < spectrumSize; i++) {
+                    table[i] = i < 24 ? 0.8 : i > 90 ? 0.6 : 0.7;
+                }
+                return table;
+            }
+
             function applyResize() {
                 const nextDpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 1.5));
                 const nextWidth = window.innerWidth;
@@ -551,7 +560,7 @@ export function bootVisualizer() {
                 for (let i = 0; i < CONFIG.spectrumSize; i++) {
                     const raw = readBand(i);
                     const prev = smoothed[i];
-                    const smooth = i < 24 ? 0.8 : i > 90 ? 0.6 : 0.7;
+                    const smooth = bandSmoothing[i];
                     smoothed[i] = prev * smooth + raw * (1 - smooth);
                     bandFlux[i] = mix(bandFlux[i], Math.abs(raw - prev), CONFIG.fluxBlend);
                     if (smoothed[i] > peak) {
@@ -714,7 +723,9 @@ export function bootVisualizer() {
             }
 
             function drawDot(x, y, radius, fillStyle, alpha) {
-                if (y <= radius * 2 || alpha <= 0) return;
+                if (alpha <= 0 || y <= radius * 2) return;
+                if (x <= -radius || x >= width + radius) return;
+                if (y >= height + radius) return;
                 ctx.globalAlpha = alpha;
                 ctx.fillStyle = fillStyle;
                 ctx.beginPath();
